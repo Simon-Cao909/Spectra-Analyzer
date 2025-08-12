@@ -42,15 +42,16 @@ Currently, the class has two ways of creating continuums. Using a spline or usin
    3. ctrl + shift + u - Saves the continuum for ALL pixels
    4. Arrow keys - These allow you to navigate your region. For instance, using the up arrow key will rerun the function with (x_pixel, y_pixel + 1)
 
-You can export the continuum you created using the .export_continuum() method. So you do not have to go through all of this again, you can use the exported file and use the set_continuum() method to automatically put it in.
-You can also use methods export_anchor_points() (exports it to a csv file with col1 = x_pixel, col2 = y_pixel, col3 = anch_p1, col4 = anch_p2, ...), set_anchor_points() (dictionary in the format {(x_pixel, y_pixel): [anch_p1, anch_p2...]}, export_weights(), and set_weights() (array the same shape as the flux) to edit your continuum later.
+You can export the continuum you created using the .export_continuum() method. So you do not have to go through all of this again, you can use the exported file and use the set_continuum() method to automatically put it in. You can also use methods export_anchor_points() (exports it to a csv file with col1 = x_pixel, col2 = y_pixel, col3 = anch_p1, col4 = anch_p2, ...), set_anchor_points() (dictionary in the format {(x_pixel, y_pixel): [anch_p1, anch_p2...]}, export_weights(), and set_weights() (array the same shape as the flux) to edit your continuum later.
 
 --
 
 # Performing Analysis
 The functions provided for performing an analysis of your data include:
-1. Creating an integrated surface brightness map (obj.create_integrated_flux_map(vmin = some_float, vmax = some_float))
+1. Creating an integrated surface brightness map (obj.create_integrated_flux_map(vmin = some_float, vmax = some_float)).
+
    This will take the continuum you created to normalize the flux, subtract 1, and then integrate over the wavelength region. It will show you the map. You can use matplotlib's built-in formatting
    to change vmin and vmax however you like
-3. Finding noise (obj.find_noise((x_pixel, y_pixel), no_feature_region = (λ_min, λ_max), poly_fit_deg = some_int, verbose = some_int)
+3. Finding noise (obj.find_noise((x_pixel, y_pixel), no_feature_region = (λ_min, λ_max), poly_fit_deg = some_int, verbose = some_int).
+
    This will find the standard deviation of the normalized no_feature_region provided and return it to give you the noise. This can later be used to find the signal to noise ratio.
