@@ -3,7 +3,7 @@ A tool for analyzing spectral data
 
 Welcome to Spectra Analyzer, by me, Simon, and of course with the help of many other people, such as Nicholas Clark, Charmi Bhatt, and Jan Cami. This is a tool for analyzing spectra, and is great for anyone looking to streamline their work, make continuums easier, and overall make their life easier. This is a quick rundown of how it works.
 
-You'll find the main code in spectraAnalyzer.py. You can import it into the file you're working in after downloading it.
+You'll find the main code in spectraAnalyzer.py. You can import it into the file you're working in after downloading it. You will also need to download the data_getter file if you wish to use fits files to initialize the object.
 
 To use the code
 1. When creating an object from the class, you can declare it either with a wavelength (shape = (i,)) and flux array (shape = (i, j, k), with j being the y index and k being the x index), or with a list of fits files in the order of shortest to longest wavelength. Note that if you do both, the fits files will take priority over the wavelength and flux. If you declare it with fits files, you can also specify the header index of the data inside the fits files. The default is 1. You can choose to stitch your spectra together if you see any overlapping regions, and finally, you can declare your wavelength range in the format (λ_min, λ_max)
