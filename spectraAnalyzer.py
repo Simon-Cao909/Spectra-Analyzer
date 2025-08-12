@@ -410,11 +410,20 @@ class spectraAnalyzer:
             
             update_continuum(poly_deg)
 
-            ax_slider = plt.axes([0.2, 0.1, 0.65, 0.05])
+            ax_slider = plt.axes([0.2, 0.15, 0.65, 0.05])
             poly_deg_slider = wdg.Slider(ax=ax_slider, label="Polynomial Degree", 
                                          valmin=1, valmax=20, 
                                          valinit=poly_deg, valstep=1)
             poly_deg_slider.on_changed(update_continuum)
+
+            weight_edit_radius = 0
+            radius_slider = wdg.Slider(ax=plt.axes([0.2, 0.05, 0.65, 0.05]), label="Weight Edit Radius", 
+                                       valmin=0, valmax=40, 
+                                       valinit=0, valstep=1)
+            def change_weight_edit_radius(new_radius):
+                nonlocal weight_edit_radius
+                weight_edit_radius = new_radius
+            radius_slider.on_changed(change_weight_edit_radius)
 
             def onclick(event):
                 print(event.key)
@@ -423,6 +432,8 @@ class spectraAnalyzer:
                 click_x, click_y = event.xdata, event.ydata
 
                 ind_change = np.argmin(np.abs(wavelength - click_x))
+                ls = max(0, ind_change - weight_edit_radius)
+                rs = min(self._wavelength.shape[0], ind_change + weight_edit_radius + 1)
                 
                 nonlocal increment
                 if event.button == 1 and event.key == 'alt':
@@ -435,27 +446,27 @@ class spectraAnalyzer:
                 if event.button == 1 and event.key and event.key == 'control':
                     if verbose >= 2:
                         print("control + left click detected!")
-                    self._weights[ind_change, pixel[1], pixel[0]] += increment
+                    self._weights[ls:rs, pixel[1], pixel[0]] += increment
                     if verbose >= 1:
-                        print(f"λ = {wavelength[ind_change]} μm now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
+                        print(f"λ = {wavelength[ls]} - {wavelength[rs]} μm now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
                 elif event.button == 3 and event.key and event.key == 'control':
                     if verbose >= 2:
                         print("control + right click detected!")
-                    self._weights[ind_change, pixel[1], pixel[0]] = max(0, self._weights[ind_change, pixel[1], pixel[0]] - increment)
+                    self._weights[ls:rs, pixel[1], pixel[0]] = max(0, self._weights[ind_change, pixel[1], pixel[0]] - increment)
                     if verbose >= 1:
-                        print(f"λ = {wavelength[ind_change]} μm now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
+                        print(f"λ = {wavelength[ls]} - {wavelength[rs]} μm now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
                 elif event.button == 1 and not event.key:
                     if verbose >= 2:
                         print("Only left click detected")
-                    self._weights[ind_change, :, :] += increment
+                    self._weights[ls:rs, :, :] += increment
                     if verbose >= 1:
-                        print(f"Adjusted λ = {wavelength[ind_change]} μm by +{increment:.1f} for all pixels.\nIt now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
+                        print(f"Adjusted λ = {wavelength[ls]} - {wavelength[rs]} μm by +{increment:.1f} for all pixels.\nIt now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
                 elif event.button == 3 and not event.key:
                     if verbose >= 2:
                         print("Only right click detected")
-                    self._weights[ind_change, :, :] -= increment
+                    self._weights[ls:rs, :, :] = np.maximum(0, self._weights[ind_change, :, :] - increment)
                     if verbose >= 1:
-                        print(f"Adjusted λ = {wavelength[ind_change]} μm by -{increment:.1f} for all pixels.\nIt now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
+                        print(f"Adjusted λ = {wavelength[ls]} - {wavelength[rs]} μm by -{increment:.1f} for all pixels.\nIt now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
                 
                 nonlocal poly_deg
                 update_continuum(poly_deg)
@@ -477,7 +488,7 @@ class spectraAnalyzer:
                     print("Done!")
                     return
                 elif event.key == 'ctrl+E':
-                    print("Exporting Continuum For All Pixels Using Given Anchor Points!")
+                    print("Exporting Continuum For All Pixels!")
                     if export_directory is None:
                         print("No Directory Provided! Terminating...")
                         return
@@ -505,11 +516,12 @@ class spectraAnalyzer:
                     print("Done!")
                     return
                 elif event.key == 'ctrl+U':
-                    print("Saving Continuum For All Pixels Using Given Anchor Points!")
+                    print("Saving Continuum For All Pixels!")
+                    transposed_flux = self._flux.transpose(2,1,0)
                     for y_index in range(self._flux.shape[1]):
                         for x_index in range(self._flux.shape[2]):
                             pixel_wavelength = self._wavelength
-                            pixel_flux = self._flux.transpose(2,1,0)[x_index, y_index]
+                            pixel_flux = transposed_flux[x_index, y_index]
                             if np.isnan(pixel_flux).all():
                                 self._continuum[:, y_index, x_index] = np.nan
                                 continue
@@ -618,6 +630,7 @@ Example of using it
 #                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 # mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
 
 
