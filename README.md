@@ -34,6 +34,7 @@ Currently, the class has two ways of creating continuums. Using a spline or usin
    5. ctrl + left click - Increase the weight of the point clicked by the increment stated by the title for ONLY this pixel
    6. ctrl + right click - Decrease the weight of the point clicked by the increment stated by the title for ONLY this pixel
    7. There is a slider that you can use to change the degree of the polynomial
+   8. There is another slider that you can use to change the radius of change of the weight. This was made so you do not have to click every single pixel.
    
 5. These are things you can do for both of the above:
    ctrl + e - Exports the continuum for ONLY this pixel to the stated directory with filename x{x_pixel}_y{y_pixel}_Spline.csv or x{x_pixel}_y{y_pixel}_Poly.csv. The first column is the wavelength
