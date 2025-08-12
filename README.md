@@ -1,7 +1,7 @@
 # Spectra-Analyzer
 A tool for analyzing spectral data
 
-Welcome to Spectra Analyzer, by me, Simon, and of course with the help of many other people, such as Nicholas Clark, Charmi Bhatt, and Jan Cami. This is a tool for analyzing spectra, and is great for anyone looking to streamline their work, make continuums easier, and overall make their life easier. This is a quick rundown of how it works.
+Welcome to Spectra Analyzer, by me, Simon, and many other people. In particular, Nicholas Clark, Charmi Bhatt, and Jan Cami. This is a tool for analyzing spectra, and is great for anyone looking to streamline their work, make continuums easier, and overall make their life easier. This is a quick rundown of how it works.
 
 You'll find the main code in spectraAnalyzer.py. You can import it into the file you're working in after downloading it. You will also need to download the data_getter file if you wish to use fits files to initialize the object.
 
