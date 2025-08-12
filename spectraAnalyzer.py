@@ -1,0 +1,621 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.widgets as wdg
+import csv
+from astropy.io import fits
+from scipy.interpolate import griddata
+from scipy.interpolate import UnivariateSpline
+from scipy import integrate
+import os
+import lmfit as lf
+
+# import spectraFactoryCode as sfc
+from Data_getter import wav_spec_file, loading_function, spectra_stitcher
+from USRA_Tools import returnBestModelParams, returnFormattedUncertainties, iceDataFormatter, round_to_num
+
+def poly_func(x, **params):
+    total = 0
+    for i in range(len(params)):
+        total += params[f'a{i}'] * x ** i
+    return total
+
+class spectraAnalyzer:
+    '''
+    Special Methods
+    '''
+    def __init__(self, wavelength = None, flux = None, fits_filepaths = [], header_index = 1, stitch=True, wavelength_range=(-np.inf, np.inf)):
+        if len(fits_filepaths) == 1:
+            data = loading_function(fits_filepaths[0])
+            wavelength = data[0]
+            flux = data[1]
+        elif len(fits_filepaths) >= 2:
+            data = []
+            for ind, filepath in enumerate(fits_filepaths):
+                data.append(loading_function(filepath, header_index))
+            
+            if stitch:
+                flux, wavelength = (None, None)
+                for ind, arr in enumerate(data):
+                    if ind == len(data)-1:
+                        break
+
+                    if ind == 0:
+                        flux, wavelength, _ = spectra_stitcher(arr[0], data[ind+1][0], arr[1], data[ind+1][1])
+                    elif ind >= 1:
+                        flux, wavelength, _ = spectra_stitcher(wavelength, data[ind+1][0], flux, data[ind+1][1])
+            elif not stitch:
+                flux, wavelength = (None, None)
+
+                for ind, arr in enumerate(data):
+                    if ind == 0:
+                        wavelength, flux = (arr[0], arr[1])
+                    elif ind >= 1:
+                        wavelength, flux = (np.concatenate((wavelength, arr[0])), np.concatenate((flux, arr[1])))
+        
+        if wavelength_range[0] >= wavelength_range[1]:
+            raise ValueError("The wavelength range is invalid! The first element must be less than the second")
+        
+        wavelength_range_mask = (wavelength >= wavelength_range[0]) * (wavelength <= wavelength_range[1])
+        self._full_wavelength = wavelength
+        self._full_flux = flux
+        self._wavelength = wavelength[wavelength_range_mask]
+        self._flux = flux[wavelength_range_mask]
+        self._wavelength_range = wavelength_range
+
+        self._continuum = np.empty_like(self._flux)
+        self._anchor_points = dict()
+        for y_index in range(self._flux.shape[1]):
+            for x_index in range(self._flux.shape[2]):
+                self._anchor_points[(x_index, y_index)] = []
+        self._weights = np.ones_like(self._flux)
+
+    def __eq__(self, other):
+        return (self._flux.shape == other.get_flux().shape) == (self._wavelength == other.get_wavelength()).all() and (self._flux == other._get_flux()).all()
+    
+    def __str__(self):
+        return f"The wavelength range is {self._wavelength_range[0]}-{self._wavelength_range[1]} μm."
+    ''''''
+
+    '''
+    Accessors
+    '''
+    def get_wavelength(self):
+        return self._wavelength
+    def get_flux(self):
+        return self._flux
+    def get_wavelength_range(self):
+        return self._wavelength_range    
+    def get_continuum(self):
+        return self._continuum
+    def get_anchor_points(self):
+        return self._anchor_points
+    ''''''
+
+    '''
+    Mutuators
+    '''
+    def set_wavelength(self, new_wavelength):
+        self._wavelength = new_wavelength
+    def set_flux(self, new_flux):
+        self._flux = new_flux
+    def set_wavelength_range(self, new_range):
+        if new_range[0] <= new_range[1]:
+            raise ValueError("The wavelength range is invalid! The first element must be less than the second")
+        self._wavelength_range = new_range
+        new_wavelength_mask = (self._full_wavelength >= new_range[0]) & (self._full_wavelength >= new_range[1])
+        self._wavelength = self._full_wavelength[new_wavelength_mask]
+        self._flux = self._full_flux[new_wavelength_mask]
+    def set_continuum(self, new_continuum):
+        self._continuum = new_continuum
+    def set_anchor_points(self, new_anchor_points):
+        self._anchor_points = new_anchor_points
+    def set_weights(self, new_weights):
+        self._weights = new_weights
+    ''''''
+
+    '''
+    Exporters
+    '''
+    def export_wavelength(self, filepath, allow_pickle=True):
+        np.save(filepath, self._wavelength, allow_pickle=allow_pickle)
+    def export_flux(self, filepath, allow_pickle=True):
+        np.save(filepath, self._flux, allow_pickle=allow_pickle)
+    def export_continuum(self, filepath, allow_pickle=True):
+        np.save(filepath, self._continuum, allow_pickle=allow_pickle)
+    def export_anchor_points(self, filepath):
+        with open(filepath, 'w', newline='') as csv_f:
+            writer = csv.writer(csv_f)
+            for key, item in self._anchor_points.items():
+                writer.writerow([key].extend(item))
+    def export_weights(self, filepath, allow_pickle=True):
+        np.save(filepath, self._weights, allow_pickle=allow_pickle)
+    ''''''
+
+    def create_plot(self, parameter):
+        fig, ax = plt.subplots()
+        if isinstance(parameter, tuple):
+            x_index, y_index = (parameter[0], parameter[1])
+            
+            flux = self._flux.transpose(2,1,0)[x_index, y_index]
+            ax.plot(self._wavelength, flux)
+            ax.set_xlabel("Wavelenth (μm)")
+            ax.set_ylabel("Flux")
+            ax.set_xlim(np.min(self._wavelength), np.max(self._wavelength))
+            ax.set_ylim(np.min(flux), np.max(flux))
+        elif isinstance(parameter, float) or isinstance(parameter, int):
+            closest_wavelength = np.argmin(np.abs(self._wavelength-parameter))
+            cw_idx = np.argmax(self._wavelength == closest_wavelength)
+
+            flux = self._flux[cw_idx]
+            ax.imshow(flux, origin='lower')
+            ax.set_xlabel("X index")
+            ax.set_ylabel("Y index")
+        
+        plt.show()
+
+        return ax
+
+    '''
+    Creating Continuums
+    '''
+    def fit_spline(self, pixel, k = 3, s = 1, verbose = 1, export_directory=None):
+        running = True
+        def plot_pixel(current_pixel):
+            anchor_inds = self._anchor_points[(current_pixel[0], current_pixel[1])]
+            wavelength = self._wavelength
+            flux = self._flux.transpose(2,1,0)[current_pixel[0], current_pixel[1]]
+            
+            fig, ax = plt.subplots()
+            continuum_points = {'x': [wavelength[ind] for ind in anchor_inds], 'y': [flux[ind] for ind in anchor_inds]}
+
+            data_plot, = ax.plot(wavelength, flux, color='black', label="Observations")
+            continuum_plot, = ax.plot([], [], color='orange', label="Continnuum")
+            points_chosen = ax.scatter(continuum_points['x'], continuum_points['y'], color='red', s=30, label="Anchor Points")
+            ax.set_xlabel("Wavelenth (μm)")
+            ax.set_ylabel("Flux")
+            ax.set_xlim(np.min(wavelength), np.max(wavelength))
+            ax.set_ylim(np.nanmin(flux) - 250, np.nanmax(flux) + 250)
+            ax.set_title(f"x = {current_pixel[0]}, y = {current_pixel[1]}")
+            ax.legend()
+
+            def update_continuum():
+                if len(continuum_points['x']) < 2:
+                    continuum_plot.set_data([], [])
+                    fig.canvas.draw_idle()
+                    return
+
+                sorted_idcs = np.argsort(continuum_points['x'])
+                x = np.array(continuum_points['x'])[sorted_idcs]
+                y = np.array(continuum_points['y'])[sorted_idcs]
+
+                if len(x) <= k:
+                    contm_flux = np.interp(self._wavelength, x, y)
+                else:
+                    spline = UnivariateSpline(x, y, k = k, s = s)
+                    contm_flux = spline(self._wavelength)
+            
+                continuum_plot.set_data(wavelength, contm_flux)
+                points_chosen.set_offsets(np.column_stack([continuum_points['x'], continuum_points['y']]))
+                fig.canvas.draw_idle()
+            
+            update_continuum()
+
+            def onclick(event):
+                if event.inaxes != ax:
+                    return
+                click_x, click_y = event.xdata, event.ydata
+
+                ind_change = np.argmin(np.abs(wavelength - click_x))
+                if event.button == 1 and event.key and event.key == 'control':
+                    if verbose >= 2:
+                        print("control + left click detected!")
+                    wavelength_add = wavelength[ind_change]
+                    flux_add = flux[ind_change]
+                    self._anchor_points[(current_pixel[0],current_pixel[1])].append(ind_change)
+                    if verbose >= 1:
+                        print(f"Added: λ = {wavelength_add} μm")
+                    continuum_points['x'].append(wavelength_add)
+                    continuum_points['y'].append(flux_add)
+                elif event.button == 3 and event.key and event.key == 'control':
+                    if verbose >= 2:
+                        print("control + right click detected!")
+                    if len(continuum_points['x']) == 0:
+                        return
+                    dists = np.abs(np.array(continuum_points['x']) - click_x)
+                    idx = np.argmin(dists)
+                    self._anchor_points[(current_pixel[0], current_pixel[1])].remove(ind_change)
+
+                    if verbose >= 1:
+                        print(f"Removed: λ = {continuum_points['x'][idx]} μm")
+                    del continuum_points['x'][idx]
+                    del continuum_points['y'][idx]
+                elif event.button == 1 and not event.key:
+                    if verbose >= 2:
+                        print("Only left click detected")
+                    for key in self._anchor_points.keys():
+                        if ind_change not in self._anchor_points[key]:
+                            self._anchor_points[key].append(ind_change)
+                    wavelength_add = wavelength[ind_change]
+                    flux_add = flux[ind_change]
+                    if verbose >= 1:
+                        print(f"Added: λ = {wavelength_add} μm")
+                    continuum_points['x'].append(wavelength_add)
+                    continuum_points['y'].append(flux_add)
+                elif event.button == 3 and not event.key:
+                    if verbose >= 2:
+                        print("Only right click detected") # Temporary
+                    if len(continuum_points['x']) == 0:
+                        return
+                    dists = np.abs(np.array(continuum_points['x']) - click_x)
+                    idx = np.argmin(dists)
+                    for key in self._anchor_points.keys():
+                        if ind_change in self._anchor_points[key]:
+                            self._anchor_points[key].remove(ind_change)
+
+                    if verbose >= 1:
+                        print(f"Removed: λ = {continuum_points['x'][idx]} μm")
+                    del continuum_points['x'][idx]
+                    del continuum_points['y'][idx]
+                    
+                points_chosen.set_offsets(np.column_stack([continuum_points['x'], continuum_points['y']]))
+                update_continuum()
+
+            def onkey(event):
+                print("Key event:", repr(event.key))
+                if event.key == "ctrl+e":
+                    print(f"Exporting Continuum For x = {current_pixel[0]}, y = {current_pixel[1]}")
+                    if export_directory is None:
+                        print("No Directory Provided! Terminating...")
+                        return
+                    elif len(continuum_points['x']) == 0:
+                        print("Nothing to Export! Terminating...")
+                        return
+
+                    with open(os.path.join(export_directory, f"x{current_pixel[0]}_y{current_pixel[1]}_Spline.csv"), 'w', newline='') as csv_f:
+                        writer = csv.writer(csv_f)
+                        contm_wavelength = wavelength
+                        contm_flux = continuum_plot.get_ydata()
+                        for ind, wavl in enumerate(contm_wavelength):
+                            writer.writerow([wavl, contm_flux[ind]])
+                    print("Done!")
+                    return
+                elif event.key == 'ctrl+E':
+                    print("Exporting Continuum For All Pixels Using Given Anchor Points!")
+                    if export_directory is None:
+                        print("No Directory Provided! Terminating...")
+                        return
+                    elif len(continuum_points['x']) == 0:
+                        print("Nothing to Export! Terminating...")
+                        return
+                    for y_index in range(self._flux.shape[1]):
+                        for x_index in range(self._flux.shape[2]):
+                            pixel_flux = self._flux.transpose(2,1,0)[x_index, y_index]
+                            if np.isnan(pixel_flux).all():
+                                print(f"({x_index}, {y_index}) pixel invalid due to NaN values. Skipping...")
+                                continue
+                            sorted_idcs = np.argsort(continuum_points['x'])
+                            x = np.array(continuum_points['x'])[sorted_idcs]
+                            y = np.empty_like(x)
+
+                            for ind, wavl in enumerate(x):
+                                idx = np.argmax(wavelength == wavl)
+                                y[ind] = pixel_flux[idx]
+                            
+                            pixel_spline = UnivariateSpline(x, y, k=k, s=s)
+
+                            pixel_contm_wavelength = wavelength
+                            pixel_contm_flux = pixel_spline(pixel_contm_wavelength)
+
+                            with open(os.path.join(export_directory, f"x{x_index}_y{y_index}_Spline.csv"), 'w', newline='') as csv_f:
+                                writer = csv.writer(csv_f)
+                                for ind, wavl in enumerate(pixel_contm_wavelength):
+                                    writer.writerow([wavl, pixel_contm_flux[ind]])
+                    print("Done!")
+                    return
+                elif event.key == 'ctrl+u':
+                    print(f"Saving Continuum For x = {current_pixel[0]}, y = {current_pixel[1]}")
+                    if len(continuum_points['x']) == 0:
+                        print("Nothing to Save! Terminating...")
+                        return
+                    contm_flux = continuum_plot.get_ydata()
+                    self._continuum[:, current_pixel[1], current_pixel[0]] = contm_flux
+
+                    print("Done!")
+                    return
+                elif event.key == 'ctrl+U':
+                    print("Saving Continuum For All Pixels Using Given Anchor Points!")
+                    if len(continuum_points['x']) == 0:
+                        print("Nothing to Save! Terminating...")
+                        return
+                    for y_index in range(self._flux.shape[1]):
+                        for x_index in range(self._flux.shape[2]):
+                            pixel_flux = self._flux.transpose(2,1,0)[x_index, y_index]
+                            if np.isnan(pixel_flux).all():
+                                self._continuum[:, y_index, x_index] = np.nan
+                                continue
+                            sorted_idcs = np.argsort(continuum_points['x'])
+                            x = np.array(continuum_points['x'])[sorted_idcs]
+                            y = np.empty_like(x)
+
+                            for ind, wavl in enumerate(x):
+                                idx = np.argmax(wavelength == wavl)
+                                y[ind] = pixel_flux[idx]
+                            
+                            pixel_spline = UnivariateSpline(x, y, k=k, s=s)
+
+                            pixel_contm_wavelength = wavelength
+                            pixel_contm_flux = pixel_spline(pixel_contm_wavelength)
+
+                            self._continuum[:, y_index, x_index] = pixel_contm_flux
+                    print("Done!")
+                    return
+                elif event.key in ('up', 'down', 'left', 'right'):
+                    plt.close(fig)
+                    nonlocal pixel
+                    if event.key == 'right':
+                        pixel = (min(pixel[0] + 1, self._flux.shape[2]-1), pixel[1])
+                    elif event.key == 'left':
+                        pixel = (max(pixel[0] - 1, 0), pixel[1])
+                    elif event.key == 'up':
+                        pixel = (pixel[0], min(pixel[1]+1, self._flux.shape[1]-1))
+                    elif event.key == 'down':
+                        pixel = (pixel[0], max(pixel[1]-1, 0))
+                elif event.key == 'escape':
+                    plt.close(fig)
+                    nonlocal running
+                    running = False
+            cid = fig.canvas.mpl_connect("button_press_event", onclick)
+            fig.canvas.mpl_connect("key_press_event", onkey)
+            plt.show()
+            plt.close()
+        
+        while running:
+            plot_pixel(pixel)
+    def fit_poly(self, pixel, poly_deg, weights = None, verbose = 1, export_directory=None):
+        if weights is not None:
+            self._weights[:, pixel[1], pixel[0]] = weights
+        print(self._weights.shape) #TEMPORARY
+        running = True
+        def plot_pixel(current_pixel):
+            increment=0.5
+            weights = self._weights[:, pixel[1], pixel[0]]
+            wavelength = self._wavelength
+            flux = self._flux.transpose(2,1,0)[current_pixel[0], current_pixel[1]]
+            fitter = lf.Model(poly_func, independent_vars=['x'])
+            param_names = [f'a{i}' for i in range(poly_deg+1)]
+            params = lf.Parameters()
+            for name in param_names:
+                params.add(name, value=1)
+            result = fitter.fit(flux, params=params, weights=weights, x=wavelength)
+
+            print(result.fit_report())
+            fig, ax = plt.subplots()
+            plt.subplots_adjust(bottom=0.25)
+            ax.plot(wavelength, flux, color='black', label='Observations')
+            continuum_plot, = ax.plot(wavelength, result.best_fit, color='orange', label='Continuum')
+            ax.set_xlabel("Wavelenth (μm)")
+            ax.set_ylabel("Flux")
+            ax.set_xlim(np.min(wavelength), np.max(wavelength))
+            ax.set_ylim(np.nanmin(flux) - 250, np.nanmax(flux) + 250)
+            ax.set_title(f"x = {current_pixel[0]}, y = {current_pixel[1]}\nWeight Increment={increment}")
+            ax.legend()
+
+            def update_continuum(new_poly_deg):
+                nonlocal params
+
+                param_names = [f'a{i}' for i in range(new_poly_deg+1)]
+                params = lf.Parameters()
+                for name in param_names:
+                    params.add(name, value=1)
+                result = fitter.fit(flux, params=params, weights=weights, x = wavelength)
+                continuum_plot.set_data(wavelength, result.best_fit)
+                ax.set_title(f"x = {current_pixel[0]}, y = {current_pixel[1]}\nWeight Increment={increment:.1f}")
+                fig.canvas.draw_idle()
+            
+            update_continuum(poly_deg)
+
+            ax_slider = plt.axes([0.2, 0.1, 0.65, 0.05])
+            poly_deg_slider = wdg.Slider(ax=ax_slider, label="Polynomial Degree", 
+                                         valmin=1, valmax=20, 
+                                         valinit=poly_deg, valstep=1)
+            poly_deg_slider.on_changed(update_continuum)
+
+            def onclick(event):
+                print(event.key)
+                if event.inaxes != ax:
+                    return
+                click_x, click_y = event.xdata, event.ydata
+
+                ind_change = np.argmin(np.abs(wavelength - click_x))
+                
+                nonlocal increment
+                if event.button == 1 and event.key == 'alt':
+                    print("Incremented the weight increment by 0.1")
+                    increment += 0.1
+                elif event.button == 3 and event.key == 'alt':
+                    print("Decremented the weight increment by 0.1")
+                    increment = max(0, increment-0.1)
+
+                if event.button == 1 and event.key and event.key == 'control':
+                    if verbose >= 2:
+                        print("control + left click detected!")
+                    self._weights[ind_change, pixel[1], pixel[0]] += increment
+                    if verbose >= 1:
+                        print(f"λ = {wavelength[ind_change]} μm now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
+                elif event.button == 3 and event.key and event.key == 'control':
+                    if verbose >= 2:
+                        print("control + right click detected!")
+                    self._weights[ind_change, pixel[1], pixel[0]] = max(0, self._weights[ind_change, pixel[1], pixel[0]] - increment)
+                    if verbose >= 1:
+                        print(f"λ = {wavelength[ind_change]} μm now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
+                elif event.button == 1 and not event.key:
+                    if verbose >= 2:
+                        print("Only left click detected")
+                    self._weights[ind_change, :, :] += increment
+                    if verbose >= 1:
+                        print(f"Adjusted λ = {wavelength[ind_change]} μm by +{increment:.1f} for all pixels.\nIt now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
+                elif event.button == 3 and not event.key:
+                    if verbose >= 2:
+                        print("Only right click detected")
+                    self._weights[ind_change, :, :] -= increment
+                    if verbose >= 1:
+                        print(f"Adjusted λ = {wavelength[ind_change]} μm by -{increment:.1f} for all pixels.\nIt now has weight {self._weights[ind_change, pixel[1], pixel[0]]:.1f} at this pixel")
+                
+                nonlocal poly_deg
+                update_continuum(poly_deg)
+            
+            def onkey(event):
+                print("Key event:", repr(event.key))
+                if event.key == "ctrl+e":
+                    print(f"Exporting Continuum For x = {current_pixel[0]}, y = {current_pixel[1]}")
+                    if export_directory is None:
+                        print("No Directory Provided! Terminating...")
+                        return
+
+                    with open(os.path.join(export_directory, f"x{current_pixel[0]}_y{current_pixel[1]}_Poly.csv"), 'w', newline='') as csv_f:
+                        writer = csv.writer(csv_f)
+                        contm_wavelength = wavelength
+                        contm_flux = continuum_plot.get_ydata()
+                        for ind, wavl in enumerate(contm_wavelength):
+                            writer.writerow([wavl, contm_flux[ind]])
+                    print("Done!")
+                    return
+                elif event.key == 'ctrl+E':
+                    print("Exporting Continuum For All Pixels Using Given Anchor Points!")
+                    if export_directory is None:
+                        print("No Directory Provided! Terminating...")
+                        return
+                    for y_index in range(self._flux.shape[1]):
+                        for x_index in range(self._flux.shape[2]):
+                            pixel_wavelength = self._wavelength
+                            pixel_flux = self._flux.transpose(2,1,0)[x_index, y_index]
+                            if np.isnan(pixel_flux).all():
+                                print(f"({x_index}, {y_index}) pixel invalid due to NaN values. Skipping...")
+                                continue
+
+                            result = fitter.fit(pixel_flux, params=params, weights=self._weights[:, y_index, x_index], x = pixel_wavelength)
+
+                            with open(os.path.join(export_directory, f"x{x_index}_y{y_index}_Poly.csv"), 'w', newline='') as csv_f:
+                                writer = csv.writer(csv_f)
+                                for ind, wavl in enumerate(pixel_wavelength):
+                                    writer.writerow([wavl, result.best_fit[ind]])
+                    print("Done!")
+                    return
+                elif event.key == 'ctrl+u':
+                    print(f"Saving Continuum For x = {current_pixel[0]}, y = {current_pixel[1]}")
+                    contm_flux = continuum_plot.get_ydata()
+                    self._continuum[:, current_pixel[1], current_pixel[0]] = contm_flux
+
+                    print("Done!")
+                    return
+                elif event.key == 'ctrl+U':
+                    print("Saving Continuum For All Pixels Using Given Anchor Points!")
+                    for y_index in range(self._flux.shape[1]):
+                        for x_index in range(self._flux.shape[2]):
+                            pixel_wavelength = self._wavelength
+                            pixel_flux = self._flux.transpose(2,1,0)[x_index, y_index]
+                            if np.isnan(pixel_flux).all():
+                                self._continuum[:, y_index, x_index] = np.nan
+                                continue
+
+                            result = fitter.fit(pixel_flux, params=params, weights=self._weights[:, y_index, x_index], x = pixel_wavelength)
+
+                            self._continuum[:, y_index, x_index] = result.best_fit
+                    print("Done!")
+                    return
+                elif event.key in ('up', 'down', 'left', 'right'):
+                    plt.close(fig)
+                    nonlocal pixel
+                    if event.key == 'right':
+                        pixel = (min(pixel[0] + 1, self._flux.shape[2]-1), pixel[1])
+                    elif event.key == 'left':
+                        pixel = (max(pixel[0] - 1, 0), pixel[1])
+                    elif event.key == 'up':
+                        pixel = (pixel[0], min(pixel[1]+1, self._flux.shape[1]-1))
+                    elif event.key == 'down':
+                        pixel = (pixel[0], max(pixel[1]-1, 0))
+                elif event.key == 'escape':
+                    plt.close(fig)
+                    nonlocal running
+                    running = False
+                
+            cid = fig.canvas.mpl_connect("button_press_event", onclick)
+            fig.canvas.mpl_connect("key_press_event", onkey)
+            plt.show()
+            plt.close()
+        
+        while running:
+            plot_pixel(pixel)
+    ''''''     
+
+    def create_integrated_flux_map(self, vmin, vmax):
+        rti_flux = self._flux / self._continuum - 1
+        integral_values = integrate.trapezoid(rti_flux, x=self._wavelength, dx=0.0001, axis=0)
+        fig, ax = plt.subplots()
+
+        im = ax.imshow(integral_values, origin='lower', vmin=vmin, vmax=vmax)
+        fig.colorbar(im, label="Integral Value")
+        ax.set_xlabel("X index")
+        ax.set_ylabel("Y index")
+        plt.show()
+
+    def find_noise(self, pixel, no_feature_region, poly_fit_deg = 1, verbose=0):
+        wavelength = self._wavelength
+        flux = self._flux.transpose(2,1,0)[pixel[0], pixel[1]]
+
+        if (not isinstance(no_feature_region, tuple)) or no_feature_region[0] >= no_feature_region[1]:
+            print("Invalid input for no_feature_region. Must be a tuple of (wavelength_min, wavelength_max)")
+            return
+        
+        no_feature_mask = (wavelength >= no_feature_region[0]) & (wavelength <= no_feature_region[1])
+        no_feature_wavelength = wavelength[no_feature_mask]
+        no_feature_flux = flux[no_feature_mask]
+
+        fitter = lf.Model(poly_func, independent_vars=['x'])
+        param_names = [f'a{i}' for i in range(poly_fit_deg+1)]
+        params = lf.Parameters()
+        for name in param_names:
+            params.add(name, value=1)
+
+        result = fitter.fit(no_feature_flux, params=params, x = no_feature_wavelength)
+
+        if verbose == 1:
+            fig, (ax1, ax2) = plt.subplots(1,2)
+            ax1.plot(wavelength, flux, "Full Observations")
+            ax1.plot(no_feature_wavelength, no_feature_flux, label = "Region Used")
+            ax1.legend()
+
+            ax2.plot(no_feature_wavelength, no_feature_flux, label = "Region Used")
+            ax2.plot(no_feature_wavelength, result.best_fit, label = "Best Fit")
+            ax2.legend()
+
+            plt.show()
+            plt.close()
+
+        return np.std(no_feature_flux / result.best_fit)
+                    
+mySpec = spectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-short_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch1-medium_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch1-long_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch2-short_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch2-medium_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch2-long_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch3-short_s3d.fits", 
+                                        r"C:\USRA_Research\Code\ngc6302_ch3-medium_s3d.fits",
+                                        r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(9.63,10.25))
+mySpec.fit_poly((60,69), 4, None)
+mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
+
+mySpec = spectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-short_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch1-medium_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch1-long_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch2-short_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch2-medium_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch2-long_s3d.fits",
+                                         r"C:\USRA_Research\Code\ngc6302_ch3-short_s3d.fits", 
+                                        r"C:\USRA_Research\Code\ngc6302_ch3-medium_s3d.fits",
+                                        r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
+mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
+mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
