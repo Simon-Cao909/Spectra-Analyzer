@@ -13,7 +13,7 @@ To use the code
 --
 
 # Creating continuums
-Currently, the class has two ways of creating continuums. Using a spline or using a polynomial. You can also set a continuum by taking an array the same shape as the flux and filling it in with continuum points.
+Currently, the class has two ways of creating continuums. Using a spline or using a polynomial. You can also set a continuum by taking an array the same shape as the flux and filling it in with continuum points. PRESS ESCAPE TO EXIT THE PLOT. PRESSING THE 'X' WILL NOT DO ANYTHING.
 1. The spline method
    You call this method with obj.fit_spline((x_pixel, y_pixel), k = degree, s = how_well_to_fiit, verbose = some_int, export_directory = "directory_here").
    This will create the flux vs. wavelength plot at the specified pixel, and this provides you with an interactive interface to create a spline. The following are the things you can do:
@@ -42,6 +42,8 @@ Currently, the class has two ways of creating continuums. Using a spline or usin
    2. ctrl + u - Saves the continuum for ONLY this pixel. Will override any current save
    3. ctrl + shift + u - Saves the continuum for ALL pixels
    4. Arrow keys - These allow you to navigate your region. For instance, using the up arrow key will rerun the function with (x_pixel, y_pixel + 1)
+
+IF THE KEY BINDS TO YOUR OPERATING SYSTEM ARE DIFFERENT, PLEASE LET ME KNOW BY SENDING AN EMAIL TO simon.cao909@gmail.com. FEEL FREE TO CHANGE THE SOURCE CODE KEY BINDS YOURSELF AS WELL FOUND IN FUNCTIONS onkey() AND onclick() IN THE fit_spline() AND fit_poly() METHODS.
 
 You can export the continuum you created using the .export_continuum() method. So you do not have to go through all of this again, you can use the exported file and use the set_continuum() method to automatically put it in. You can also use methods export_anchor_points() (exports it to a csv file with col1 = x_pixel, col2 = y_pixel, col3 = anch_p1, col4 = anch_p2, ...), set_anchor_points() (dictionary in the format {(x_pixel, y_pixel): [anch_p1, anch_p2...]}, export_weights(), and set_weights() (array the same shape as the flux) to edit your continuum later.
 
