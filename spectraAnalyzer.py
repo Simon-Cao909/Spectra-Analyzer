@@ -2,16 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.widgets as wdg
 import csv
-from astropy.io import fits
-from scipy.interpolate import griddata
 from scipy.interpolate import UnivariateSpline
 from scipy import integrate
 import os
 import lmfit as lf
 
 # import spectraFactoryCode as sfc
-from Data_getter import wav_spec_file, loading_function, spectra_stitcher
-from USRA_Tools import returnBestModelParams, returnFormattedUncertainties, iceDataFormatter, round_to_num
+from Data_getter import loading_function, spectra_stitcher
 
 def poly_func(x, **params):
     total = 0
@@ -618,4 +615,5 @@ mySpec = spectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-sho
                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
