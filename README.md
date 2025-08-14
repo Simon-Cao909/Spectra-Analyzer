@@ -83,6 +83,5 @@ The functions provided for performing an analysis of your data include:
 4. Fitting models (obj.set_models() and obj.fit_models())
 
    This allows you to fit models in .csv files to your data. You can specify a radial velocity range, the directory your files are in, and the pattern to follow for the filenames. This will upload
-   all of the models, each shifted to a radial velocity, to the object, and then you can run obj.fit_models() to find the best-fit parameters to your data.
-
-   Note that doing this with a lot of models may cause your computer to overheat. I will add a way to fit models in a less-intensive way in future updates.
+   all of the models, each shifted to a radial velocity, to the object, and then you can run obj.fit_models() to find the best-fit parameters to your data. There is also a way to control how CPU-
+   intensive the calculations will be by setting CPU_usage to 'medium' or 'high'
