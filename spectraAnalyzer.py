@@ -830,55 +830,48 @@ class spectraAnalyzer:
     '''
     Modelling the Data
     '''
-    def fit_models(self, pixels, export_filepath, n_params = 3, verbose=1):
+    def fit_models(self, pixels, export_filepath, n_params = 3, verbose=1, CPU_usage='medium'):
         model_data = self._model_data
         model_files = self._model_files
         rad_vel_range = self._radial_velocity_range
+        wavelength = self._wavelength
+        continuum = self._continuum
+        flux = self._flux
+        dof = len(wavelength) - n_params
 
-        reformatted_model_data = np.repeat(model_data[:, :, :, np.newaxis], len(pixels), axis=-1).transpose(0,1,3,2)
-        reformatted_norm_flux = np.empty(reformatted_model_data.shape[2:])
+        if CPU_usage == 'medium':
+            with open(export_filepath, 'w', newline='') as csv_f:
+                writer = csv.writer(csv_f)
+                writer.writerow(["X", "Y", "File", "Radial Velocity (m/s)", "Chi Square", "Reduced Chi Square"])
+                for pixel_ind, pixel in enumerate(pixels):
+                    if verbose >= 2:
+                        print("Currently Processing:", pixel)
+                    x_index, y_index = pixel
+                    norm_pixel_flux = flux[:, y_index, x_index] / continuum[:, y_index, x_index]
+                    chi_squared = np.sum(((model_data - norm_pixel_flux) / np.std(norm_pixel_flux))**2, axis=-1)
+                    rv_ind, file_ind = np.unravel_index(np.argmin(chi_squared), chi_squared.shape)
+                    writer.writerow([x_index, y_index, model_files[file_ind], rad_vel_range[rv_ind], chi_squared[rv_ind, file_ind], chi_squared[rv_ind, file_ind] / dof])
 
-        for pixel_ind, pixel in enumerate(pixels):
-            x_index, y_index = pixel
-            reformatted_norm_flux[pixel_ind, :] = self._flux[:, y_index, x_index] / self._continuum[:, y_index, x_index]
-        
-        dof = len(self._wavelength) - n_params
-        chi_squared = np.sum(((reformatted_model_data - reformatted_norm_flux) / np.std(reformatted_norm_flux, axis=-1, keepdims=True)) ** 2, axis=-1)
+        elif CPU_usage == 'high':
+            reformatted_model_data = np.repeat(model_data[:, :, :, np.newaxis], len(pixels), axis=-1).transpose(0,1,3,2)
+            reformatted_norm_flux = np.empty(reformatted_model_data.shape[2:])
 
-        with open(export_filepath, 'w', newline='') as csv_f:
-            writer = csv.writer(csv_f)
-            writer.writerow(["X", "Y", "File", "Radial Velocity (m/s)", "Chi Square", "Reduced Chi Square"])
             for pixel_ind, pixel in enumerate(pixels):
-                if verbose >= 2:
-                    print("Currently Processing", pixel)
-                rv_ind, file_ind = np.unravel_index(np.argmin(chi_squared[:, :, pixel_ind]), chi_squared.shape[:2])
-                writer.writerow([pixel[0], pixel[1], model_files[file_ind], rad_vel_range[rv_ind], chi_squared[rv_ind, file_ind, pixel_ind], chi_squared[rv_ind, file_ind, pixel_ind] / dof])
-                if pixel == (60,69): # Debugging
-                    print(chi_squared[rv_ind, file_ind, pixel_ind] / dof)
-                    rv_ind2 = [ind for ind, rv in enumerate(rad_vel_range) if rv == -43000][0]
-                    file_ind2 = [ind for ind, file in enumerate(model_files) if "CO2_626_CDSD_v1.000_NTH_gauss_T30.000_N16.800_R3500.00_O2_etau.csv" in file][0]
-                    print(-43000 in rad_vel_range)
-                    print("A!", chi_squared[rv_ind2, file_ind2, pixel_ind] / dof)
+                x_index, y_index = pixel
+                reformatted_norm_flux[pixel_ind, :] = self._flux[:, y_index, x_index] / self._continuum[:, y_index, x_index]
+            
+            dof = len(self._wavelength) - n_params
+            chi_squared = np.sum(((reformatted_model_data - reformatted_norm_flux) / np.std(reformatted_norm_flux, axis=-1, keepdims=True)) ** 2, axis=-1)
 
-                    mod_x, mod_y = wav_spec_file(self._model_files[file_ind],0,np.inf)
-                    mod_x = np.array(mod_x) * (1 + rad_vel_range[rv_ind]/C)
-                    mod_y = np.array(mod_y)
-
-                    mod_x2, mod_y2 = wav_spec_file(self._model_files[file_ind2],0,np.inf)
-                    mod_x2 = np.array(mod_x2) * (1 + rad_vel_range[rv_ind2]/C)
-                    mod_y2 = np.array(mod_y2)
-
-                    norm_flux = self._flux.transpose(2,1,0)[60,69] / self._continuum.transpose(2,1,0)[60,69]
-                    plt.plot(self._wavelength, norm_flux + 0.5)
-                    plt.plot(self._wavelength, norm_flux)
-                    plt.plot(mod_x, mod_y + 0.5, label = "Fitted model")
-                    plt.plot(mod_x2, mod_y2, label = "Other model")
-                    norm_flux = self._flux[:, pixel[1], pixel[0]] / self._continuum[:, pixel[1], pixel[0]]
-                    print(np.sum(((norm_flux - np.interp(self._wavelength, mod_x2, np.array(mod_y2))) / np.std(norm_flux)) ** 2) / dof)
-                    plt.legend()
-                    plt.show()
-                    plt.close()
-        return chi_squared
+            with open(export_filepath, 'w', newline='') as csv_f:
+                writer = csv.writer(csv_f)
+                writer.writerow(["X", "Y", "File", "Radial Velocity (m/s)", "Chi Square", "Reduced Chi Square"])
+                for pixel_ind, pixel in enumerate(pixels):
+                    if verbose >= 2:
+                        print("Currently Processing", pixel)
+                    rv_ind, file_ind = np.unravel_index(np.argmin(chi_squared[:, :, pixel_ind]), chi_squared.shape[:2])
+                    writer.writerow([pixel[0], pixel[1], model_files[file_ind], rad_vel_range[rv_ind], chi_squared[rv_ind, file_ind, pixel_ind], chi_squared[rv_ind, file_ind, pixel_ind] / dof])
+            return chi_squared
     ''''''
 
     def create_integrated_flux_map(self, vmin, vmax):
@@ -955,6 +948,7 @@ Example of using it
 #                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 # mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
 
 
