@@ -64,6 +64,9 @@ class spectraAnalyzer:
             for x_index in range(self._flux.shape[2]):
                 self._anchor_points[(x_index, y_index)] = []
         self._weights = np.ones_like(self._flux)
+        self._model_data = None
+        self._model_files = None
+        self._radial_velocity_range = None
 
     def __eq__(self, other):
         return (self._flux.shape == other.get_flux().shape) == (self._wavelength == other.get_wavelength()).all() and (self._flux == other._get_flux()).all()
@@ -85,6 +88,8 @@ class spectraAnalyzer:
         return self._continuum
     def get_anchor_points(self):
         return self._anchor_points
+    def get_models(self):
+        return self._model_data
     ''''''
 
     '''
@@ -103,10 +108,43 @@ class spectraAnalyzer:
         self._flux = self._full_flux[new_wavelength_mask]
     def set_continuum(self, new_continuum):
         self._continuum = new_continuum
+    def set_pixel_continuum(self, pixels, new_continuums):
+        for ind, pixel in enumerate(pixels):
+            x_index, y_index = pixel
+            self._continuum[:, y_index, x_index] = new_continuums[ind]
     def set_anchor_points(self, new_anchor_points):
         self._anchor_points = new_anchor_points
     def set_weights(self, new_weights):
         self._weights = new_weights
+    def set_models(self, directory, radial_velocity, pattern = '', verbose=1):
+        self._radial_velocity_range = radial_velocity
+        wavelength = self._wavelength
+        num_files = len([file for file in os.listdir(directory) if file.lower().endswith(".csv") and pattern in file])
+        self._model_data = np.empty((len(radial_velocity), num_files, len(wavelength)))
+
+        file_ind = 0
+        used_files = []
+        for root, _, files in os.walk(directory):
+            for file in files:
+                if pattern not in file:
+                    continue
+                filepath = os.path.join(root, file)
+                used_files.append(filepath)
+                model_wavelength, model_flux = wav_spec_file(filepath, 0, np.inf)
+                model_wavelength = np.array(model_wavelength)
+                model_flux = np.array(model_flux)
+
+                for rv_ind, rv in enumerate(radial_velocity):
+                    if verbose >= 2:
+                        print(f"Currently importing file: {file}  |  v_rad = {rv} m/s")
+                    shifted_model_wavelength = model_wavelength * (1 + rv/C)
+                    interpolated_model_flux = np.interp(wavelength, shifted_model_wavelength, model_flux)
+                    self._model_data[rv_ind, file_ind, :] = interpolated_model_flux
+                
+                file_ind += 1
+        if verbose >= 1:
+            print(f"Finished Importing Data! Shape: {self._model_data.shape}")
+        self._model_files = used_files
     ''''''
 
     '''
@@ -122,34 +160,192 @@ class spectraAnalyzer:
         with open(filepath, 'w', newline='') as csv_f:
             writer = csv.writer(csv_f)
             for key, item in self._anchor_points.items():
-                writer.writerow([key].extend(item))
+                write_this = [key[0], key[1]]
+                write_this.extend(item)
+                writer.writerow(write_this)
     def export_weights(self, filepath, allow_pickle=True):
         np.save(filepath, self._weights, allow_pickle=allow_pickle)
     ''''''
 
-    def create_plot(self, parameter):
+    def create_plot(self, parameter = None, backmap = None, datamap = None, data_with_params_filepath = None):
         fig, ax = plt.subplots()
+        if parameter is None and backmap is None:
+            print("Invalid Input! Either parameter or backmap must have a value")
+            return
         if isinstance(parameter, tuple):
-            x_index, y_index = (parameter[0], parameter[1])
+            x_index, y_index = parameter
             
             flux = self._flux.transpose(2,1,0)[x_index, y_index]
-            ax.plot(self._wavelength, flux)
+            ax.plot(self._wavelength, flux, label = "Observations", color='black')
+            continuum_plot, = ax.plot([], [], label = "Continuum", color='orange')
+            normalized_plot, = ax.plot([], [], label = "Normalized Observations", color = 'black')
+            model_plot, = ax.plot([], [], label = "Model", color = 'red')
             ax.set_xlabel("Wavelenth (μm)")
             ax.set_ylabel("Flux")
             ax.set_xlim(np.min(self._wavelength), np.max(self._wavelength))
-            ax.set_ylim(np.min(flux), np.max(flux))
-        elif isinstance(parameter, float) or isinstance(parameter, int):
-            closest_wavelength = np.argmin(np.abs(self._wavelength-parameter))
-            cw_idx = np.argmax(self._wavelength == closest_wavelength)
+            ax.set_ylim(np.nanmin(flux)-250, np.nanmax(flux)+250)
+            ax.set_title(f"x = {x_index}, y = {y_index}")
+            ax.legend()
 
-            flux = self._flux[cw_idx]
+            ctm_counter = 0
+            norm_counter = 0
+            model_counter = 0
+            def onkey(event):
+                nonlocal ctm_counter
+                nonlocal norm_counter
+                nonlocal model_counter
+                print("Key Event: ", repr(event.key))
+                if event.key == 'c':
+                    ctm_counter += 1
+                    if ctm_counter % 2 == 1:
+                        print("Continuum toggle ON")
+                        continuum_plot.set_data(self._wavelength, self._continuum.transpose(2,1,0)[x_index, y_index, :])
+                    else:
+                        print("Continuum toggle OFF")
+                        continuum_plot.set_data([], [])
+                elif event.key == 'n':
+                    norm_counter += 1
+                    if norm_counter % 2 == 1:
+                        print("Showing normalized plot")
+                        norm_flux = flux / self._continuum.transpose(2,1,0)[x_index, y_index, :]
+                        normalized_plot.set_data(self._wavelength, norm_flux)
+                        ax.set_ylim(np.nanmin(norm_flux) - 0.01, np.nanmax(norm_flux) + 0.01)
+                        ax.set_ylabel("Normalized Flux")
+                    else:
+                        print("Returning to observations")
+                        normalized_plot.set_data([], [])
+                        ax.set_ylim(np.nanmin(flux)-250, np.nanmax(flux)+250)
+                elif event.key == 'm':
+                    model_counter += 1
+                    if model_counter % 2 == 1:
+                        if data_with_params_filepath is None:
+                            print("No filepath inputted!")
+                            return
+                        norm_flux = flux / self._continuum.transpose(2,1,0)[x_index, y_index, :]
+                        print("Showing model")
+                        with open(data_with_params_filepath, 'r') as csv_f:
+                            reader = csv.reader(csv_f)
+                            next(reader)
+                            data = list(reader)
+
+                            flag = False
+                            for lt in data:
+                                if int(lt[0]) == x_index and int(lt[1]) == y_index:
+                                    filepath = lt[2]
+                                    rv = float(lt[3])
+                                    redchi = float(lt[5])
+                                    flag = True
+                            if flag == False:
+                                print("Not in the region of fitting!")
+                            else:
+                                modelx, modely = wav_spec_file(filepath, 0, np.inf)
+                                modelx = np.array(modelx) * (1 + rv/C)
+                                modely = np.array(modely)
+                                model_plot.set_data(modelx, modely)
+                                model_plot.set_label(f"Model: {os.path.basename(filepath)}\n$v_{{rad}}$ = {rv} m/s\n$χ_ν^2$ = {redchi:.2f}")
+                                ax.set_ylim(np.nanmin(norm_flux) - 0.01, np.nanmax(norm_flux) + 0.01)
+                                ax.set_ylabel("Normalized Flux")
+                    else:
+                        print("Returning to Observations")
+                        model_plot.set_data([], [])
+                        ax.set_ylim(np.nanmin(flux)-250, np.nanmax(flux)+250)
+
+
+
+
+                fig.canvas.draw_idle()
+
+            fig.canvas.mpl_connect("key_press_event", onkey)
+
+        elif isinstance(parameter, float) or isinstance(parameter, int) or backmap is not None:
+            if backmap is None:
+                closest_wavelength = np.argmin(np.abs(self._wavelength-parameter))
+                cw_idx = np.argmax(self._wavelength == closest_wavelength)
+                flux = self._flux[cw_idx]
+            else:
+                flux = backmap
             ax.imshow(flux, origin='lower')
+            if datamap is not None:
+                ax.imshow(datamap, origin='lower')
             ax.set_xlabel("X index")
             ax.set_ylabel("Y index")
+
+            show = 'observations'
+            def onclick(event):
+                if event.inaxes != ax:
+                    return
+                click_x, click_y = round(event.xdata), round(event.ydata)
+                if event.button == 1:
+                    print(f"Showing (x,y) = ({click_x}, {click_y})")
+                    flux = self._flux[:, click_y, click_x]
+                    fig2, ax2 = plt.subplots()
+                    if show in ('observations', 'continuum'):
+                        ax2.plot(self._wavelength, flux, color='black', label="Observations")
+                        ax2.set_ylabel("Flux")
+                        if show == 'continuum':
+                            ax2.plot(self._wavelength, self._continuum[:, click_y, click_x], color='orange', label="Continuum")
+                        ax2.set_ylim(flux.min()-250, flux.max()+250)
+                    elif show == 'normalized':
+                        norm_flux = flux / self._continuum[:, click_y, click_x]
+                        ax2.plot(self._wavelength, norm_flux, color='black', label="Normalized Observations")
+                        ax2.axhline(1, linestyle='--', color='red')
+                        ax2.set_ylabel("Normalized Flux")
+                        ax2.set_ylim(norm_flux.min()-0.01, norm_flux.max()+0.01)
+                    elif show == 'model':
+                        norm_flux = flux / self._continuum[:, click_y, click_x]
+                        with open(data_with_params_filepath, 'r') as csv_f:
+                            reader = csv.reader(csv_f)
+                            next(reader)
+                            data = list(reader)
+
+                            flag = False
+                            for lt in data:
+                                if int(lt[0]) == click_x and int(lt[1]) == click_y:
+                                    filepath = lt[2]
+                                    rv = float(lt[3])
+                                    redchi = float(lt[5])
+                                    flag = True
+                            if flag == False:
+                                print("Not in the region of fitting!")
+                            else:
+                                modelx, modely = wav_spec_file(filepath, 0, np.inf)
+                                modelx = np.array(modelx) * (1 + rv/C)
+                                modely = np.array(modely)
+                                ax2.plot(modelx, modely, color='red', label=f"Model: {os.path.basename(filepath)}\n$v_{{rad}}$ = {rv} m/s\n$χ_ν^2$ = {redchi:.2f}")
+                        ax2.plot(self._wavelength, norm_flux, color='black', label="Normalized Observations")
+                        ax2.axhline(1, linestyle='--', color='red')
+                        ax2.set_ylabel("Normalized Flux")
+                        ax2.set_ylim(norm_flux.min()-0.01, norm_flux.max()+0.01)
+                    ax2.set_xlabel("Wavelenth (μm)")
+                    ax2.set_xlim(self._wavelength.min(), self._wavelength.max())
+                    ax2.set_title(f"x = {click_x}, y = {click_y}")
+                    ax2.legend()
+                    fig2.show()
+                
+            def onkey(event):
+                nonlocal show
+                print("Key Event:", repr(event.key))
+                if event.key == 'ctrl+n':
+                    print("Normalized toggle ON")
+                    show = 'normalized'
+                elif event.key == 'ctrl+c':
+                    print("Continuum toggle ON")
+                    show = 'continuum'
+                elif event.key == 'ctrl+o':
+                    print("Continuum toggle OFF. Normalized toggle OFF")
+                    show = 'observations'
+                elif event.key == 'ctrl+m':
+                    if data_with_params_filepath is None:
+                        print("No filepath inputted!")
+                    else:
+                        print("Model toggle ON")
+                        show = 'model'
+
+            fig.canvas.mpl_connect("key_press_event", onkey)
+            fig.canvas.mpl_connect("button_press_event", onclick)
         
         plt.show()
-
-        return ax
+        plt.close()
 
     '''
     Creating Continuums
@@ -219,6 +415,7 @@ class spectraAnalyzer:
                         return
                     dists = np.abs(np.array(continuum_points['x']) - click_x)
                     idx = np.argmin(dists)
+                    ind_change = np.argmax(np.abs((wavelength - click_x)) == np.min(dists))
                     self._anchor_points[(current_pixel[0], current_pixel[1])].remove(ind_change)
 
                     if verbose >= 1:
@@ -244,6 +441,7 @@ class spectraAnalyzer:
                         return
                     dists = np.abs(np.array(continuum_points['x']) - click_x)
                     idx = np.argmin(dists)
+                    ind_change = np.argmax(np.abs((wavelength - click_x)) == np.min(dists))
                     for key in self._anchor_points.keys():
                         if ind_change in self._anchor_points[key]:
                             self._anchor_points[key].remove(ind_change)
@@ -289,13 +487,12 @@ class spectraAnalyzer:
                             if np.isnan(pixel_flux).all():
                                 print(f"({x_index}, {y_index}) pixel invalid due to NaN values. Skipping...")
                                 continue
-                            sorted_idcs = np.argsort(continuum_points['x'])
-                            x = np.array(continuum_points['x'])[sorted_idcs]
-                            y = np.empty_like(x)
-
-                            for ind, wavl in enumerate(x):
-                                idx = np.argmax(wavelength == wavl)
-                                y[ind] = pixel_flux[idx]
+                            pixel_anchor_points = self._anchor_points[(x_index, y_index)]
+                            x = [wavelength[point] for point in pixel_anchor_points]
+                            y = [pixel_flux[point] for point in pixel_anchor_points]
+                            sorted_idcs = np.argsort(x)
+                            x = np.array(x)[sorted_idcs]
+                            y = np.array(y)[sorted_idcs]
                             
                             pixel_spline = UnivariateSpline(x, y, k=k, s=s)
 
@@ -329,9 +526,12 @@ class spectraAnalyzer:
                             if np.isnan(pixel_flux).all():
                                 self._continuum[:, y_index, x_index] = np.nan
                                 continue
-                            sorted_idcs = np.argsort(continuum_points['x'])
-                            x = np.array(continuum_points['x'])[sorted_idcs]
-                            y = np.empty_like(x)
+                            pixel_anchor_points = self._anchor_points[(x_index, y_index)]
+                            x = [wavelength[point] for point in pixel_anchor_points]
+                            y = [pixel_flux[point] for point in pixel_anchor_points]
+                            sorted_idcs = np.argsort(x)
+                            x = np.array(x)[sorted_idcs]
+                            y = np.array(y)[sorted_idcs]
 
                             for ind, wavl in enumerate(x):
                                 idx = np.argmax(wavelength == wavl)
@@ -360,6 +560,18 @@ class spectraAnalyzer:
                     plt.close(fig)
                     nonlocal running
                     running = False
+                elif event.key == 'n':
+                    if verbose >= 1:
+                        print("Generating Normalized Plot...")
+                    n_fig, n_ax = plt.subplots()
+                    n_ax.plot(wavelength, flux / continuum_plot.get_ydata(), color='black')
+                    n_ax.axhline(1, linestyle='--', color='red')
+                    n_ax.set_xlabel("Wavelength (μm)")
+                    n_ax.set_ylabel("Normalized Flux")
+                    n_ax.set_title(f"x = {current_pixel[0]}, y = {current_pixel[1]} Normalized Plot")
+                    n_fig.show()
+                    plt.close(fig)
+
             cid = fig.canvas.mpl_connect("button_press_event", onclick)
             fig.canvas.mpl_connect("key_press_event", onkey)
             plt.show()
@@ -500,9 +712,13 @@ class spectraAnalyzer:
                         for x_index in range(self._flux.shape[2]):
                             pixel_wavelength = self._wavelength
                             pixel_flux = self._flux.transpose(2,1,0)[x_index, y_index]
-                            if np.isnan(pixel_flux).all():
+                            pixel_nan_mask = np.isnan(pixel_flux)
+                            if pixel_nan_mask.all():
                                 print(f"({x_index}, {y_index}) pixel invalid due to NaN values. Skipping...")
                                 continue
+                            elif pixel_nan_mask.any():
+                                print(f"({x_index}, {y_index}) pixel has certain NaN values. Will interpolate over...")
+                                pixel_flux[pixel_nan_mask] = np.interp(np.flatnonzero(pixel_nan_mask), np.flatnonzero(~pixel_nan_mask), pixel_flux[~pixel_nan_mask]) 
 
                             result = fitter.fit(pixel_flux, params=params, weights=self._weights[:, y_index, x_index], x = pixel_wavelength)
 
@@ -526,9 +742,13 @@ class spectraAnalyzer:
                         for x_index in range(self._flux.shape[2]):
                             pixel_wavelength = self._wavelength
                             pixel_flux = transposed_flux[x_index, y_index]
-                            if np.isnan(pixel_flux).all():
-                                self._continuum[:, y_index, x_index] = np.nan
+                            pixel_nan_mask = np.isnan(pixel_flux)
+                            if pixel_nan_mask.all():
+                                print(f"({x_index}, {y_index}) pixel invalid due to NaN values. Skipping...")
                                 continue
+                            elif pixel_nan_mask.any():
+                                print(f"({x_index}, {y_index}) pixel has certain NaN values. Will interpolate over...")
+                                pixel_flux[pixel_nan_mask] = np.interp(np.flatnonzero(pixel_nan_mask), np.flatnonzero(~pixel_nan_mask), pixel_flux[~pixel_nan_mask]) 
 
                             result = fitter.fit(pixel_flux, params=params, weights=self._weights[:, y_index, x_index], x = pixel_wavelength)
 
@@ -550,6 +770,17 @@ class spectraAnalyzer:
                     plt.close(fig)
                     nonlocal running
                     running = False
+                elif event.key == 'n':
+                    if verbose >= 1:
+                        print("Generating Normalized Plot...")
+                    n_fig, n_ax = plt.subplots()
+                    n_ax.plot(wavelength, flux / continuum_plot.get_ydata(), color='black')
+                    n_ax.axhline(1, linestyle='--', color='red')
+                    n_ax.set_xlabel("Wavelength (μm)")
+                    n_ax.set_ylabel("Normalized Flux")
+                    n_ax.set_title(f"x = {current_pixel[0]}, y = {current_pixel[1]} Normalized Plot")
+                    n_fig.show()
+                    plt.close(fig)
                 
             cid = fig.canvas.mpl_connect("button_press_event", onclick)
             fig.canvas.mpl_connect("key_press_event", onkey)
@@ -558,7 +789,61 @@ class spectraAnalyzer:
         
         while running:
             plot_pixel(pixel)
-    ''''''     
+    ''''''
+
+    '''
+    Modelling the Data
+    '''
+    def fit_models(self, pixels, export_filepath, n_params = 3, verbose=1):
+        model_data = self._model_data
+        model_files = self._model_files
+        rad_vel_range = self._radial_velocity_range
+
+        reformatted_model_data = np.repeat(model_data[:, :, :, np.newaxis], len(pixels), axis=-1).transpose(0,1,3,2)
+        reformatted_norm_flux = np.empty(reformatted_model_data.shape[2:])
+
+        for pixel_ind, pixel in enumerate(pixels):
+            x_index, y_index = pixel
+            reformatted_norm_flux[pixel_ind, :] = self._flux[:, y_index, x_index] / self._continuum[:, y_index, x_index]
+        
+        dof = len(self._wavelength) - n_params
+        chi_squared = np.sum(((reformatted_model_data - reformatted_norm_flux) / np.std(reformatted_norm_flux, axis=-1, keepdims=True)) ** 2, axis=-1)
+
+        with open(export_filepath, 'w', newline='') as csv_f:
+            writer = csv.writer(csv_f)
+            writer.writerow(["X", "Y", "File", "Radial Velocity (m/s)", "Chi Square", "Reduced Chi Square"])
+            for pixel_ind, pixel in enumerate(pixels):
+                if verbose >= 2:
+                    print("Currently Processing", pixel)
+                rv_ind, file_ind = np.unravel_index(np.argmin(chi_squared[:, :, pixel_ind]), chi_squared.shape[:2])
+                writer.writerow([pixel[0], pixel[1], model_files[file_ind], rad_vel_range[rv_ind], chi_squared[rv_ind, file_ind, pixel_ind], chi_squared[rv_ind, file_ind, pixel_ind] / dof])
+                if pixel == (60,69): # Debugging
+                    print(chi_squared[rv_ind, file_ind, pixel_ind] / dof)
+                    rv_ind2 = [ind for ind, rv in enumerate(rad_vel_range) if rv == -43000][0]
+                    file_ind2 = [ind for ind, file in enumerate(model_files) if "CO2_626_CDSD_v1.000_NTH_gauss_T30.000_N16.800_R3500.00_O2_etau.csv" in file][0]
+                    print(-43000 in rad_vel_range)
+                    print("A!", chi_squared[rv_ind2, file_ind2, pixel_ind] / dof)
+
+                    mod_x, mod_y = wav_spec_file(self._model_files[file_ind],0,np.inf)
+                    mod_x = np.array(mod_x) * (1 + rad_vel_range[rv_ind]/C)
+                    mod_y = np.array(mod_y)
+
+                    mod_x2, mod_y2 = wav_spec_file(self._model_files[file_ind2],0,np.inf)
+                    mod_x2 = np.array(mod_x2) * (1 + rad_vel_range[rv_ind2]/C)
+                    mod_y2 = np.array(mod_y2)
+
+                    norm_flux = self._flux.transpose(2,1,0)[60,69] / self._continuum.transpose(2,1,0)[60,69]
+                    plt.plot(self._wavelength, norm_flux + 0.5)
+                    plt.plot(self._wavelength, norm_flux)
+                    plt.plot(mod_x, mod_y + 0.5, label = "Fitted model")
+                    plt.plot(mod_x2, mod_y2, label = "Other model")
+                    norm_flux = self._flux[:, pixel[1], pixel[0]] / self._continuum[:, pixel[1], pixel[0]]
+                    print(np.sum(((norm_flux - np.interp(self._wavelength, mod_x2, np.array(mod_y2))) / np.std(norm_flux)) ** 2) / dof)
+                    plt.legend()
+                    plt.show()
+                    plt.close()
+        return chi_squared
+    ''''''
 
     def create_integrated_flux_map(self, vmin, vmax):
         rti_flux = self._flux / self._continuum - 1
@@ -570,7 +855,7 @@ class spectraAnalyzer:
         ax.set_xlabel("X index")
         ax.set_ylabel("Y index")
         plt.show()
-
+    
     def find_noise(self, pixel, no_feature_region, poly_fit_deg = 1, verbose=0):
         wavelength = self._wavelength
         flux = self._flux.transpose(2,1,0)[pixel[0], pixel[1]]
@@ -634,6 +919,7 @@ Example of using it
 #                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 # mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
 
 
