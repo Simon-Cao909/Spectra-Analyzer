@@ -251,9 +251,6 @@ class spectraAnalyzer:
                         model_plot.set_data([], [])
                         ax.set_ylim(np.nanmin(flux)-250, np.nanmax(flux)+250)
 
-
-
-
                 fig.canvas.draw_idle()
 
             fig.canvas.mpl_connect("key_press_event", onkey)
@@ -352,6 +349,31 @@ class spectraAnalyzer:
     Creating Continuums
     '''
     def fit_spline(self, pixel, k = 3, s = 1, verbose = 1, export_directory=None):
+        '''
+        This will create the flux vs. wavelength plot at the specified pixel, 
+        and this provides you with an interactive interface to create a spline.
+
+        The following are the things you can do:
+        left click - Add an anchor point for ALL pixels
+        right click - Remove an anchor point for ALL pixels
+        ctrl + left click - Add an anchor point for ONLY this pixel
+        ctrl + right click - Remove an anchor point for ONLY this pixel
+        ctrl + e - Exports the continuum for ONLY this pixel to the stated directory with filename x{x_pixel}_y{y_pixel}_Spline.csv. The first column is the wavelength and the second is the flux
+        ctrl + shift + e - Exports the continuum for ALL pixels in the above format
+        ctrl + u - Saves the continuum for ONLY this pixel. Will override any current save
+        ctrl + shift + u - Saves the continuum for ALL pixels
+        t - Toggles the anchor point editing
+        Arrow keys - These allow you to navigate your region. For instance, using the up arrow key will rerun the function with (x_pixel, y_pixel + 1)
+
+        :param self (spectraAnalyzer): The object you are working with
+        :param pixel (tuple): A tuple in the format (x_index, y_index)
+        :param k (int): The degree of the spline
+        :param s (int): The smoothness of the spline
+        :param verbose (int): If set to 0, it will display nothing about the process. If set to 1, it will display something, and if set to 2, it will display everything
+        :param export_directory (String or None): If not None, the files exported through ctrl + e and ctrl + shift + e will be put here. If it is None, ctrl + e and ctrl + shift + e will not work
+
+        :returns: None
+        '''
         running = True
         def plot_pixel(current_pixel):
             anchor_inds = self._anchor_points[(current_pixel[0], current_pixel[1])]
@@ -393,10 +415,14 @@ class spectraAnalyzer:
             
             update_continuum()
 
+            toggle = [True,0]
             def onclick(event):
                 if event.inaxes != ax:
                     return
                 click_x, click_y = event.xdata, event.ydata
+
+                if not toggle[0]:
+                    return
 
                 ind_change = np.argmin(np.abs(wavelength - click_x))
                 if event.button == 1 and event.key and event.key == 'control':
@@ -457,6 +483,16 @@ class spectraAnalyzer:
 
             def onkey(event):
                 print("Key event:", repr(event.key))
+                if event.key == 't':
+                    nonlocal toggle
+                    toggle[1] += 1
+                    if toggle[1] % 2 == 1:
+                        print("Anchor Point Toggle OFF")
+                        toggle[0] = False
+                    else:
+                        print("Anchor Point Toggle ON")
+                        toggle[0] = True
+
                 if event.key == "ctrl+e":
                     print(f"Exporting Continuum For x = {current_pixel[0]}, y = {current_pixel[1]}")
                     if export_directory is None:
@@ -919,6 +955,7 @@ Example of using it
 #                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 # mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
 
 
