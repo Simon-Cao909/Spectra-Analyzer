@@ -22,6 +22,7 @@ Currently, the class has two ways of creating continuums. Using a spline or usin
    3. ctrl + left click - Add an anchor point for ONLY this pixel
    4. ctrl + right click - Remove an anchor point for ONLY this pixel
    5. ctrl + e - Exports the continuum for ONLY this pixel to the stated directory with filename x{x_pixel}_y{y_pixel}_Spline.csv. The first column is the wavelength and the second is the flux
+   6. t - Toggles the anchor point editing
 3. The polynomial method
    You call this method with obj.fit_poly((x_pixel, y_pixel), poly_deg = degree, weights = None or array with shape (k,), verbose = some_int, export_directory = "directory_here")
    This will create the flux vs. wavelength plot at the specified pixel, and this provides you with an interactive interface to create a polynomial fit. There will already be a continuum plotted.
