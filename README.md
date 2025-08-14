@@ -56,6 +56,32 @@ The functions provided for performing an analysis of your data include:
 
    This will take the continuum you created to normalize the flux, subtract 1, and then integrate over the wavelength region. It will show you the map. You can use matplotlib's built-in formatting
    to change vmin and vmax however you like
-3. Finding noise (obj.find_noise((x_pixel, y_pixel), no_feature_region = (λ_min, λ_max), poly_fit_deg = some_int, verbose = some_int).
+2. Finding noise (obj.find_noise((x_pixel, y_pixel), no_feature_region = (λ_min, λ_max), poly_fit_deg = some_int, verbose = some_int).
 
    This will find the standard deviation of the normalized no_feature_region provided and return it to give you the noise. This can later be used to find the signal to noise ratio.
+
+3. Looking at the plot. (obj.create_plot(some_param))
+
+   This will create a plot of your data at the inputted parameter. This parameter can either be a tuple to create a wavelength vs. flux plot at the specified pixel, or it can be a float to create a
+   pixel vs. flux heatmap at the specified wavelength.
+
+   For the wavelength vs. flux plot, you can:
+   1. Press 'c' to show the continuum
+   2. Press 'n' to show the normalized plot
+   3. Press 'm' to show the best-fit model
+
+   For the pixel vs. flux plot, you can:
+   1. Click on any point in the plot to show the wavelength vs. flux plot at that point
+   2. Press 'ctrl+c' to toggle on continuum
+   3. Press 'ctrl+n' to toggle on normalization
+   4. Press 'ctrl+m' to toggle on the model
+
+   NOTE: You need to have the associated items created to be able to show the associated plots! For instance, you must first fit the models to show the models. Using the keybinds without doing that
+   will create unexpected results or result in an error
+
+4. Fitting models (obj.set_models() and obj.fit_models())
+
+   This allows you to fit models in .csv files to your data. You can specify a radial velocity range, the directory your files are in, and the pattern to follow for the filenames. This will upload
+   all of the models, each shifted to a radial velocity, to the object, and then you can run obj.fit_models() to find the best-fit parameters to your data.
+
+   Note that doing this with a lot of models may cause your computer to overheat. I will add a way to fit models in a less-intensive way in future updates.
