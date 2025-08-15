@@ -618,7 +618,7 @@ class spectraAnalyzer:
             plot_pixel(pixel)
     def fit_poly(self, pixel, poly_deg, weights = None, verbose = 1, export_directory=None):
         if weights is not None:
-            self._weights[:, pixel[1], pixel[0]] = weights
+            self._weights[:] = weights[:, None, None]
         running = True
         def plot_pixel(current_pixel):
             increment=0.5
@@ -948,6 +948,7 @@ Example of using it
 #                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 # mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
 
 
