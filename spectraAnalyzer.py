@@ -117,6 +117,8 @@ class spectraAnalyzer:
         self._wavelength = new_wavelength
     def set_flux(self, new_flux):
         self._flux = new_flux
+        self._continuum = np.empty_like(self._flux)
+        self._weights = np.ones_like(self._flux)
     def set_wavelength_range(self, new_range):
         if new_range[0] <= new_range[1]:
             raise ValueError("The wavelength range is invalid! The first element must be less than the second")
@@ -133,6 +135,14 @@ class spectraAnalyzer:
     def set_anchor_points(self, new_anchor_points):
         self._anchor_points = new_anchor_points
     def set_anchor_pts_from_file(self, filepath):
+        '''
+        Sets anchor points using the csv file exported from the method .export_anchor_points()
+
+        :param self (spectraAnalyzer): The object you are working with
+        :param filepath (String): The filepath to the anchor points
+
+        :returns: None
+        '''
         anchor_pts = dict()
         with open(filepath, 'r') as csv_f:
             reader = csv.reader(csv_f)
@@ -147,6 +157,18 @@ class spectraAnalyzer:
     def set_weights(self, new_weights):
         self._weights = new_weights
     def set_models(self, directory, radial_velocity, pattern = '', verbose=1):
+        '''
+        Saves the models to the object by uploading them from a provided directory
+
+        :param self (spectraAnalyzer): The object you're working with
+        :param directory (String): The directory of the model files
+        :param radial velocity (1-D Array): An array of radial velocities
+        :param pattern (String): A pattern that the model files follow. This can be used to only take certain files from a directory
+        :param verbose (int): Decides how much of the process is outputted to the terminal
+        
+        :returns: None
+        '''
+        
         self._radial_velocity_range = radial_velocity
         wavelength = self._wavelength
         num_files = len([file for file in os.listdir(directory) if file.lower().endswith(".csv") and pattern in file])
@@ -309,9 +331,6 @@ class spectraAnalyzer:
                         print("Returning to Observations")
                         model_plot.set_data([], [])
                         ax.set_ylim(np.nanmin(flux)-250, np.nanmax(flux)+250)
-
-
-
 
                 fig.canvas.draw_idle()
 
@@ -701,6 +720,7 @@ class spectraAnalyzer:
         ctrl + shift + e - Exports the continuum for ALL pixels in the above format
         ctrl + u - Saves the continuum for ONLY this pixel. Will override any current save
         ctrl + shift + u - Saves the continuum for ALL pixels
+        t - Toggles the weight editing
         Arrow keys - These allow you to navigate your region. For instance, using the up arrow key will rerun the function with (x_pixel, y_pixel + 1)
         
         :param self (spectraAnalyzer): The object you are working with
@@ -985,11 +1005,47 @@ class spectraAnalyzer:
                         print("Currently Processing", pixel)
                     rv_ind, file_ind = np.unravel_index(np.argmin(chi_squared[:, :, pixel_ind]), chi_squared.shape[:2])
                     writer.writerow([pixel[0], pixel[1], model_files[file_ind], rad_vel_range[rv_ind], chi_squared[rv_ind, file_ind, pixel_ind], chi_squared[rv_ind, file_ind, pixel_ind] / dof])
+                    if False and pixel == (60,69): # Debugging
+                        print(chi_squared[rv_ind, file_ind, pixel_ind] / dof)
+                        rv_ind2 = [ind for ind, rv in enumerate(rad_vel_range) if rv == -43000][0]
+                        file_ind2 = [ind for ind, file in enumerate(model_files) if "CO2_626_CDSD_v1.000_NTH_gauss_T30.000_N16.800_R3500.00_O2_etau.csv" in file][0]
+                        print(-43000 in rad_vel_range)
+                        print("A!", chi_squared[rv_ind2, file_ind2, pixel_ind] / dof)
+
+                        mod_x, mod_y = wav_spec_file(self._model_files[file_ind],0,np.inf)
+                        mod_x = np.array(mod_x) * (1 + rad_vel_range[rv_ind]/C)
+                        mod_y = np.array(mod_y)
+
+                        mod_x2, mod_y2 = wav_spec_file(self._model_files[file_ind2],0,np.inf)
+                        mod_x2 = np.array(mod_x2) * (1 + rad_vel_range[rv_ind2]/C)
+                        mod_y2 = np.array(mod_y2)
+
+                        norm_flux = self._flux.transpose(2,1,0)[60,69] / self._continuum.transpose(2,1,0)[60,69]
+                        plt.plot(self._wavelength, norm_flux + 0.5)
+                        plt.plot(self._wavelength, norm_flux)
+                        plt.plot(mod_x, mod_y + 0.5, label = "Fitted model")
+                        plt.plot(mod_x2, mod_y2, label = "Other model")
+                        norm_flux = self._flux[:, pixel[1], pixel[0]] / self._continuum[:, pixel[1], pixel[0]]
+                        print(np.sum(((norm_flux - np.interp(self._wavelength, mod_x2, np.array(mod_y2))) / np.std(norm_flux)) ** 2) / dof)
+                        plt.legend()
+                        plt.show()
+                        plt.close()
             if chi_export_directory is not None:
                 np.save(os.path.join(chi_export_directory, "All_Pixels_Chi2.npy"), chi_squared, allow_pickle=True)
     ''''''
 
     def create_integrated_flux_map(self, vmin, vmax):
+        '''
+        Creates an integrated flux map by using the continuum to normalize the flux, subtracting one, 
+        and then integrating over the wavelength region
+
+        :param self (spectraAnalyzer): The object you're working with
+        :param vmin (float): The minimum value of the heatcolor shown
+        :param vmax (float): The maximum value of the heatcolor shown
+
+        :returns: None
+        '''
+        
         rti_flux = self._flux / self._continuum - 1
         integral_values = integrate.trapezoid(rti_flux, x=self._wavelength, dx=0.0001, axis=0)
         fig, ax = plt.subplots()
@@ -1001,6 +1057,19 @@ class spectraAnalyzer:
         plt.show()
     
     def find_noise(self, pixel, no_feature_region, poly_fit_deg = 1, verbose=0):
+        '''
+        Takes a small specified region with no features from the spectrum, normalizes it,
+        and returns the standard deviation
+
+        :param self (spectraAnalyzer): The object you're working with
+        :param pixel (tuple): A tuple containing the pixel to analyze (x_index, y_index)
+        :param no_feature_region (tuple): A tuple containing (lambda_min, lambda_max) of a small region with no visible features
+        :param poly_fit_deg (int): The polynomial degree that is fitted to the small region
+        :param verbose (int): Decides how much of the process is outputted
+
+        :returns: The standard deviation of the normalized region specified as a NumPy float64
+        '''
+        
         wavelength = self._wavelength
         flux = self._flux.transpose(2,1,0)[pixel[0], pixel[1]]
 
@@ -1033,10 +1102,10 @@ class spectraAnalyzer:
             plt.show()
             plt.close()
 
-        return np.std(no_feature_flux / result.best_fit)
+        return np.std(no_feature_flux / result.best_fit, dtype = np.float64)
 
     def user_friendly_run(self):
-                print("Welcome to Spectra Analyzer! What would you like to do?")
+        print("Welcome to Spectra Analyzer! What would you like to do?")
         user_action = input("OPTIONS: Export, Create Plot, Fit Spline, Fit Polynomial, Fit Models\nCreate Integrated Flux Map, EXIT\n")
         
         while user_action.lower() != 'exit':
@@ -1159,6 +1228,7 @@ Example of using it
 #                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 # mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
 
 
