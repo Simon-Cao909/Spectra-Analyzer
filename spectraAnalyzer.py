@@ -18,9 +18,26 @@ def poly_func(x, **params):
 
 class spectraAnalyzer:
     '''
+    Welcome to Spectra Analyzer, by me, Simon, and many other people. 
+    In particular, Nicholas Clark, Charmi Bhatt, and Jan Cami. 
+    
+    This is a tool for analyzing spectra, and is great for anyone looking to streamline their work, 
+    make continuums easier, and overall make their life easier. 
+    '''
+    
+    '''
     Special Methods
     '''
-    def __init__(self, wavelength = None, flux = None, fits_filepaths = [], header_index = 1, stitch=True, wavelength_range=(-np.inf, np.inf)):
+    def __init__(self, wavelength = None, flux = None, fits_filepaths = [], header_index = 1, stitch=True, wavelength_range=(-np.inf, np.inf)):        
+        '''
+        When creating an object from the class, you can declare it either with a wavelength (shape = (i,)) and flux array (shape = (i, j, k), 
+        with j being the y index and k being the x index), or with a list of fits files in the order of shortest to longest wavelength. 
+        Note that if you do both, the fits files will take priority over the wavelength and flux. 
+        If you declare it with fits files, you can also specify the header index of the data inside the fits files. 
+        The default is 1. You can choose to stitch your spectra together if you see any overlapping regions, 
+        and finally, you can declare your wavelength range in the format (λ_min, λ_max)
+        '''
+        
         if len(fits_filepaths) == 1:
             data = loading_function(fits_filepaths[0])
             wavelength = data[0]
@@ -169,6 +186,36 @@ class spectraAnalyzer:
     ''''''
 
     def create_plot(self, parameter = None, backmap = None, datamap = None, data_with_params_filepath = None):
+        '''
+        This will create a plot of your data at the inputted parameter. 
+        This parameter can either be a tuple to create a wavelength vs. flux plot at the specified pixel, 
+        or it can be a float to create a pixel vs. flux heatmap at the specified wavelength.
+
+        For the wavelength vs. flux plot, you can:
+
+        Press 'c' to show the continuum
+        Press 'n' to show the normalized plot
+        Press 'm' to show the best-fit model
+        For the pixel vs. flux plot, you can:
+
+        Click on any point in the plot to show the wavelength vs. flux plot at that point
+        Press 'ctrl+c' to toggle on continuum
+        Press 'ctrl+n' to toggle on normalization
+        Press 'ctrl+m' to toggle on the model
+
+        NOTE: You need to have the associated items created to be able to show the associated plots! 
+        For instance, you must first fit the models to show the models. 
+        Using the keybinds without doing that will create unexpected results or result in an error
+
+        :param self (spectraAnalyzer): The object you're working with
+        :param parameter (float, tuple, or None): The parameter used to create the plot
+        :param backmap (2-D array or None): If it is not None, it is used as the background for the heatmap
+        :param datamap (2-D array or None): If it is not None, it is used to create a datamap on the heatmap
+        :param data_with_params_filepath (String): If it is not None, it will be used as the filepath where the best-fit models are located
+
+        :returns: None
+        '''
+        
         fig, ax = plt.subplots()
         if parameter is None and backmap is None:
             print("Invalid Input! Either parameter or backmap must have a value")
@@ -251,6 +298,9 @@ class spectraAnalyzer:
                         model_plot.set_data([], [])
                         ax.set_ylim(np.nanmin(flux)-250, np.nanmax(flux)+250)
 
+
+
+
                 fig.canvas.draw_idle()
 
             fig.canvas.mpl_connect("key_press_event", onkey)
@@ -311,7 +361,7 @@ class spectraAnalyzer:
                                 modely = np.array(modely)
                                 ax2.plot(modelx, modely, color='red', label=f"Model: {os.path.basename(filepath)}\n$v_{{rad}}$ = {rv} m/s\n$χ_ν^2$ = {redchi:.2f}")
                         ax2.plot(self._wavelength, norm_flux, color='black', label="Normalized Observations")
-                        ax2.axhline(1, linestyle='--', color='red')
+                        ax2.axhline(1, linestyle='--', color='black')
                         ax2.set_ylabel("Normalized Flux")
                         ax2.set_ylim(norm_flux.min()-0.01, norm_flux.max()+0.01)
                     ax2.set_xlabel("Wavelenth (μm)")
@@ -482,7 +532,8 @@ class spectraAnalyzer:
                 update_continuum()
 
             def onkey(event):
-                print("Key event:", repr(event.key))
+                if verbose >= 2:
+                    print("Key event:", repr(event.key))
                 if event.key == 't':
                     nonlocal toggle
                     toggle[1] += 1
@@ -617,6 +668,39 @@ class spectraAnalyzer:
         while running:
             plot_pixel(pixel)
     def fit_poly(self, pixel, poly_deg, weights = None, verbose = 1, export_directory=None):
+        '''
+        This will create the flux vs. wavelength plot at the specified pixel, 
+        and this provides you with an interactive interface to create a polynomial fit. 
+        There will already be a continuum plotted. This was done by fitting a polynomial 
+        at the specified degree to all of the data using the weights provided. 
+        If you would like to ignore a section of the data (e.g. because there are features), 
+        you can set the weights for that region to zero. 
+        
+        The following are the things you can do:
+        left click - Increase the weight of the point clicked by the increment stated by the title for ALL pixels
+        right cick - Decrease the weight of the point clicked by the increment stated by the title for ALL pixels
+        alt + left click - Increase the increment of the weight
+        alt + right click - Decrease the increment of the weight
+        ctrl + left click - Increase the weight of the point clicked by the increment stated by the title for ONLY this pixel
+        ctrl + right click - Decrease the weight of the point clicked by the increment stated by the title for ONLY this pixel
+        There is a slider that you can use to change the degree of the polynomial
+        There is another slider that you can use to change the radius of change of the weight. This was made so you do not have to click every single pixel.
+        ctrl + e - Exports the continuum for ONLY this pixel in the format x{x_pixel}_y{y_pixel}_Poly.csv
+        ctrl + shift + e - Exports the continuum for ALL pixels in the above format
+        ctrl + u - Saves the continuum for ONLY this pixel. Will override any current save
+        ctrl + shift + u - Saves the continuum for ALL pixels
+        Arrow keys - These allow you to navigate your region. For instance, using the up arrow key will rerun the function with (x_pixel, y_pixel + 1)
+        
+        :param self (spectraAnalyzer): The object you are working with
+        :param pixel (tuple): A tuple in the format (x_index, y_index)
+        :param poly_deg (int): The initial degree of the polynomial
+        :param weights (1-D array or None): The weights used to fit the polynomial. If set to None, a ones_like array will be used
+        :param verbose (int): If set to 0, it will display nothing about the process. If set to 1, it will display something, and if set to 2, it will display everything
+        :param export_directory (String or None): If not None, the files exported through ctrl + e and ctrl + shift + e will be put here. If it is None, ctrl + e and ctrl + shift + e will not work
+
+        :returns: None
+        '''
+        
         if weights is not None:
             self._weights[:] = weights[:, None, None]
         running = True
@@ -675,12 +759,16 @@ class spectraAnalyzer:
                 weight_edit_radius = new_radius
             radius_slider.on_changed(change_weight_edit_radius)
 
+            toggle = [True, 0]
             def onclick(event):
                 if verbose == 2:
                     print("Key Press Detected:", event.key)
                 if event.inaxes != ax:
                     return
                 click_x, click_y = event.xdata, event.ydata
+
+                if not toggle[0]:
+                    return
 
                 ind_change = np.argmin(np.abs(wavelength - click_x))
                 change_mask = (wavelength >= (wavelength[ind_change] - weight_edit_radius)) & (wavelength <= (wavelength[ind_change] + weight_edit_radius))
@@ -724,7 +812,18 @@ class spectraAnalyzer:
                 update_continuum(poly_deg)
             
             def onkey(event):
-                print("Key event:", repr(event.key))
+                if verbose >= 2:
+                    print("Key event:", repr(event.key))
+                if event.key == 't':
+                    nonlocal toggle
+                    toggle[1] += 1
+                    if toggle[1] % 2 == 1:
+                        print("Anchor Point Toggle OFF")
+                        toggle[0] = False
+                    else:
+                        print("Anchor Point Toggle ON")
+                        toggle[0] = True
+
                 if event.key == "ctrl+e":
                     print(f"Exporting Continuum For x = {current_pixel[0]}, y = {current_pixel[1]}")
                     if export_directory is None:
@@ -830,7 +929,7 @@ class spectraAnalyzer:
     '''
     Modelling the Data
     '''
-    def fit_models(self, pixels, export_filepath, n_params = 3, verbose=1, CPU_usage='medium'):
+    def fit_models(self, pixels, export_filepath, n_params = 3, verbose=1, CPU_usage='medium', chi_export_directory = None):
         model_data = self._model_data
         model_files = self._model_files
         rad_vel_range = self._radial_velocity_range
@@ -851,6 +950,9 @@ class spectraAnalyzer:
                     chi_squared = np.sum(((model_data - norm_pixel_flux) / np.std(norm_pixel_flux))**2, axis=-1)
                     rv_ind, file_ind = np.unravel_index(np.argmin(chi_squared), chi_squared.shape)
                     writer.writerow([x_index, y_index, model_files[file_ind], rad_vel_range[rv_ind], chi_squared[rv_ind, file_ind], chi_squared[rv_ind, file_ind] / dof])
+                    
+                    if chi_export_directory is not None:
+                        np.save(os.path.join(chi_export_directory, f"x{x_index}_y{y_index}_Chi2.npy"), chi_squared, allow_pickle=True)
 
         elif CPU_usage == 'high':
             reformatted_model_data = np.repeat(model_data[:, :, :, np.newaxis], len(pixels), axis=-1).transpose(0,1,3,2)
@@ -871,7 +973,8 @@ class spectraAnalyzer:
                         print("Currently Processing", pixel)
                     rv_ind, file_ind = np.unravel_index(np.argmin(chi_squared[:, :, pixel_ind]), chi_squared.shape[:2])
                     writer.writerow([pixel[0], pixel[1], model_files[file_ind], rad_vel_range[rv_ind], chi_squared[rv_ind, file_ind, pixel_ind], chi_squared[rv_ind, file_ind, pixel_ind] / dof])
-            return chi_squared
+            if chi_export_directory is not None:
+                np.save(os.path.join(chi_export_directory, "All_Pixels_Chi2.npy"), chi_squared, allow_pickle=True)
     ''''''
 
     def create_integrated_flux_map(self, vmin, vmax):
@@ -920,6 +1023,102 @@ class spectraAnalyzer:
 
         return np.std(no_feature_flux / result.best_fit)
 
+    def user_friendly_run(self):
+                print("Welcome to Spectra Analyzer! What would you like to do?")
+        user_action = input("OPTIONS: Export, Create Plot, Fit Spline, Fit Polynomial, Fit Models\nCreate Integrated Flux Map, EXIT\n")
+        
+        while user_action.lower() != 'exit':
+            if user_action.lower() == 'export':
+                user_action2 = input("What would you like to export? (OPTIONS: Wavelength (1), Flux (2), Continuum (3), Anchor Points (4), Weights (5), EXIT)\n")
+                while user_action2.lower() != 'exit':
+                    filepath = input("What filepath would you like the file to have?\n")
+                    exporters = [self.export_wavelength, self.export_flux, self.export_continuum, self.export_anchor_points, self.export_weights]
+                    
+                    if not user_action2.isnumeric():
+                        print("Please input a number!")
+                        continue
+                    else:
+                        if int(user_action2) <= 0 or int(user_action2) >= len(exporters):
+                            print("Out of bounds!")
+                            continue
+
+                    exporters[int(user_action2)-1](filepath)
+                    user_action2 = input("What else would you like to export? (OPTIONS: Wavelength (1), Flux (2), Continuum (3), Anchor Points (4), Weights (5), EXIT)\n")
+            elif user_action.lower() == 'create plot':
+                user_action2 = input("Flux vs. Wavelength (1), Heatmap (2)\n")
+                if not user_action2.isnumeric():
+                    print("Please input a number!")
+                elif user_action2 == '1':
+                    x_index = int(input("What x index? "))
+                    y_index = int(input("What y index? "))
+                    filepath = input("Data with params filepath? (If you do not have it, input 'no')\n")
+                    if filepath.lower() == 'no':
+                        filepath = None
+                    else:
+                        filepath = filepath.strip('"')
+                    self.create_plot((x_index, y_index), data_with_params_filepath=filepath)
+                elif user_action2 == '2':
+                    wavelength = float(input("What wavelength? "))
+                    filepath = input("Data with params filepath? (If you do not have it, input 'no')\n")
+                    if filepath.lower() == 'no':
+                        filepath = None
+                    else:
+                        filepath = filepath.strip('"')
+                    self.create_plot(wavelength, data_with_params_filepath=filepath)
+            elif user_action.lower() == 'fit spline':
+                x_index = int(input("What x index? "))
+                y_index = int(input("What y index? "))
+                poly_deg = int(input("What spline degree? "))
+                smoothness = int(input("How smooth? (INT) "))
+                verbose = int(input("Verbose? (INT) "))
+                export_dir = input("Export directory? (If None, just press enter) ")
+                if export_dir == '':
+                    export_dir = None
+                self.fit_spline((x_index, y_index), k = poly_deg, s = smoothness, verbose=verbose, export_directory=export_dir)
+            elif user_action.lower() == 'fit polynomial':
+                x_index = int(input("What x index? "))
+                y_index = int(input("What y index? "))
+                poly_deg = int(input("What initial degree? "))
+                verbose = int(input("Verbose? (INT) "))
+                export_dir = input("Export directory? (If None, just press enter) ")
+                if export_dir == '':
+                    export_dir = None
+                self.fit_poly((x_index, y_index), poly_deg, weights=None, verbose=verbose, export_directory=export_dir)
+            elif user_action.lower() == 'fit models':
+                directory = input("Model directory? ")
+                min_radvel = int(input("Most negative radial velocity (m/s): "))
+                max_radvel = int(input("Most positive radial velocity (m/s): "))
+                step = int(input("What radial velocity step (m/s)? "))
+                pattern = input("Is there any substring that is in every model filename? (If None, just press enter) ")
+
+                min_x = int(input("Mininum x: "))
+                max_x = int(input("Maximum x: "))
+                min_y = int(input("Minimum y: "))
+                max_y = int(input("Maximum y: "))
+
+                pixels = []
+                for x_index in range(min_x, max_x+1):
+                    for y_index in range(min_y, max_y+1):
+                        pixels.append((x_index, y_index))
+
+                n_params = int(input("How many parameters are being fit? (INT) "))
+
+                export_filepath = input("Export data_with_params filepath: ")
+                chi_cube_dir = input("Chi cube export directory: (if None, just press enter) ")
+                if chi_cube_dir == '':
+                    chi_cube_dir = None
+
+                export_filepath = export_filepath.strip('"')
+                rad_vel_range = np.arange(min_radvel, max_radvel, step)
+
+
+                self.set_models(directory, rad_vel_range, pattern=pattern, verbose=1)
+                self.fit_models(pixels=pixels, export_filepath=export_filepath, n_params=n_params, verbose=1, CPU_usage='medium', chi_export_directory=chi_cube_dir)
+            
+            elif user_action.lower() == 'create integrated flux map':
+                self.create_integrated_flux_map(-0.004, 0.004)
+        
+            user_action = input("What else would you like to do? (OPTIONS: Export, Create Plot, Fit Spline, Fit Polynomial, Fit Models\nCreate Integrated Flux Map, EXIT)\n")
 
 '''
 Example of using it
@@ -948,6 +1147,7 @@ Example of using it
 #                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 # mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
 
 
