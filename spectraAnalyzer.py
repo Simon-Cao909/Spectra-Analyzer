@@ -132,6 +132,18 @@ class spectraAnalyzer:
             self._continuum[:, y_index, x_index] = new_continuums[ind]
     def set_anchor_points(self, new_anchor_points):
         self._anchor_points = new_anchor_points
+    def set_anchor_pts_from_file(self, filepath):
+        anchor_pts = dict()
+        with open(filepath, 'r') as csv_f:
+            reader = csv.reader(csv_f)
+            for lt in reader:
+                key = (int(lt[0]), int(lt[1]))
+                vals = []
+                for ind, el in enumerate(lt):
+                    if ind >= 2:
+                        vals.append(int(el))
+                anchor_pts[key] = vals
+        self._anchor_points = anchor_pts
     def set_weights(self, new_weights):
         self._weights = new_weights
     def set_models(self, directory, radial_velocity, pattern = '', verbose=1):
@@ -1147,6 +1159,7 @@ Example of using it
 #                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
 # mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
+
 
 
 
