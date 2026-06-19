@@ -12,6 +12,12 @@ To use the code
 
 --
 
+# Why I built this
+When performing infrared spectroscopy research, I found it continuum fitting and spectral analysis required repeatedly writing custom scripts, handling 200 different edge cases, and by the time three months are done you have lines like: "specifically for x = 63, y = 67"
+SpectraAnalyzer was built out of my own experience to solve many of the issues I faced. You can handle edge cases in seconds and massively streamline your workflow, turning what took me an entire summer to maybe 1 or 2 weeks. It provides an interactive interface for loading, visualizing, fitting, and analyzing spectral data, something I wished I had when starting this project.
+
+--
+
 # Creating continuums
 Currently, the class has two ways of creating continuums. Using a spline or using a polynomial. You can also set a continuum by taking an array the same shape as the flux and filling it in with continuum points. PRESS ESCAPE TO EXIT THE PLOT. PRESSING THE 'X' WILL NOT DO ANYTHING.
 1. The spline method
