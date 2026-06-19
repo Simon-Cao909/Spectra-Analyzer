@@ -1204,41 +1204,6 @@ class SpectraAnalyzer:
 '''
 Example of using it
 '''
-# mySpec = SpectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-short_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch1-medium_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch1-long_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch2-short_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch2-medium_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch2-long_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch3-short_s3d.fits", 
-#                                         r"C:\USRA_Research\Code\ngc6302_ch3-medium_s3d.fits",
-#                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(9.63,10.25))
-# mySpec.fit_poly((60,69), 4, None)
+# mySpec = SpectraAnalyzer(fits_filepaths=["file1.fits","file2.fits"], stitch=True, wavelength_range=(9.63,10.25))
+# mySpec.fit_poly((50,50), 4, None)
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
-
-
-# mySpec = SpectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-short_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch1-medium_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch1-long_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch2-short_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch2-medium_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch2-long_s3d.fits",
-#                                          r"C:\USRA_Research\Code\ngc6302_ch3-short_s3d.fits", 
-#                                         r"C:\USRA_Research\Code\ngc6302_ch3-medium_s3d.fits",
-#                                         r"C:\USRA_Research\Code\ngc6302_ch3-long_s3d.fits"], stitch=True, wavelength_range=(14.76,15.2))
-# mySpec.fit_spline((60,69), export_directory=r"C:\USRA_Research\Temporary") # Creates a spline
-# mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
-
-
-
-
-
-
-
-
-
-
-
-
-
-
