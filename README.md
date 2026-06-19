@@ -23,6 +23,7 @@ Interactive heatmap:
 
 <img width="420" height="358" alt="interactive_heatmap" src="https://github.com/user-attachments/assets/c9f434b8-6ac5-4dbe-a3ec-b094507bd156" />
 
+
 Spline fitting:
 
 <img width="322" height="274" alt="spline_fitting" src="https://github.com/user-attachments/assets/bd5cb23c-6605-4116-baa6-6e2ef33bdc66" />
