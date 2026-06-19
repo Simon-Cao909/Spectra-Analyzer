@@ -8,7 +8,7 @@ import os
 import lmfit as lf
 
 # Loading_function and spectra_stitcher are functions by Nicholas Clark
-from Data_getter import wav_spec_file, loading_function, spectra_stitcher
+from data_getter import wav_spec_file, loading_function, spectra_stitcher
 
 def poly_func(x, **params):
     total = 0
