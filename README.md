@@ -15,7 +15,7 @@ To use the code
 # Creating continuums
 Currently, the class has two ways of creating continuums. Using a spline or using a polynomial. You can also set a continuum by taking an array the same shape as the flux and filling it in with continuum points. PRESS ESCAPE TO EXIT THE PLOT. PRESSING THE 'X' WILL NOT DO ANYTHING.
 1. The spline method
-   You call this method with obj.fit_spline((x_pixel, y_pixel), k = degree, s = how_well_to_fiit, verbose = some_int, export_directory = "directory_here").
+   You call this method with obj.fit_spline((x_pixel, y_pixel), k = degree, s = how_well_to_fit, verbose = some_int, export_directory = "directory_here").
    This will create the flux vs. wavelength plot at the specified pixel, and this provides you with an interactive interface to create a spline. The following are the things you can do:
    1. left click - Add an anchor point for ALL pixels
    2. right click - Remove an anchor point for ALL pixels
@@ -28,13 +28,13 @@ Currently, the class has two ways of creating continuums. Using a spline or usin
    This was done by fitting a polynomial at the specified degree to all of the data using the weights provided. If you would like to ignore a section of the data (e.g. because there are features),
    you can set the weights for that region to zero. The following are the things you can do:
    1. left click - Increase the weight of the point clicked by the increment stated by the title for ALL pixels
-   2. right cick - Decrease the weight of the point clicked by the increment stated by the title for ALL pixels
+   2. right click - Decrease the weight of the point clicked by the increment stated by the title for ALL pixels
    3. alt + left click - Increase the increment of the weight
    4. alt + right click - Decrease the increment of the weight
    5. ctrl + left click - Increase the weight of the point clicked by the increment stated by the title for ONLY this pixel
    6. ctrl + right click - Decrease the weight of the point clicked by the increment stated by the title for ONLY this pixel
    7. There is a slider that you can use to change the degree of the polynomial
-   8. There is another slider that you can use to change the radius of change of the weight. This was made so you do not have to click every single pixel.
+   8. There is another slider that you can use to change the radius of change of the weight. This was added so you do not need to adjust every wavelength point individually.
    
 5. These are things you can do for both of the above:
    ctrl + e - Exports the continuum for ONLY this pixel to the stated directory with filename x{x_pixel}_y{y_pixel}_Spline.csv or x{x_pixel}_y{y_pixel}_Poly.csv. The first column is the wavelength
