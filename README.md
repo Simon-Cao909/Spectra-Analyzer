@@ -28,6 +28,10 @@ Spline fitting:
 
 <img width="322" height="274" alt="spline_fitting" src="https://github.com/user-attachments/assets/bd5cb23c-6605-4116-baa6-6e2ef33bdc66" />
 
+Polynomial fitting:
+
+<img width="356" height="300" alt="poly_fitting" src="https://github.com/user-attachments/assets/e39e7643-b16f-45d2-bbdc-24abe245c51b" />
+
 --
 
 # Creating continuums
