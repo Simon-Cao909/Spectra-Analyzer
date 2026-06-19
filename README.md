@@ -21,7 +21,7 @@ SpectraAnalyzer was built out of my own experience to solve many of the issues I
 # Some examples
 Interactive heatmap:
 
-<img width="420" height="358" alt="interactive_heatmap" src="https://github.com/user-attachments/assets/c9f434b8-6ac5-4dbe-a3ec-b094507bd156" />
+<img width="322" height="274" alt="interactive_heatmap" src="https://github.com/user-attachments/assets/c9f434b8-6ac5-4dbe-a3ec-b094507bd156" />
 
 
 Spline fitting:
@@ -30,7 +30,7 @@ Spline fitting:
 
 Polynomial fitting:
 
-<img width="356" height="300" alt="poly_fitting" src="https://github.com/user-attachments/assets/e39e7643-b16f-45d2-bbdc-24abe245c51b" />
+<img width="322" height="274" alt="poly_fitting" src="https://github.com/user-attachments/assets/e39e7643-b16f-45d2-bbdc-24abe245c51b" />
 
 --
 
