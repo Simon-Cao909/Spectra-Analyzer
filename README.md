@@ -10,6 +10,19 @@ To use the code
 2. The class has accessors, mutators, and exporters, and you can use them however you like.
 3. The class has other methods that will be discussed below
 
+# Quick start
+```python
+from spectra_analyzer import SpectraAnalyzer
+
+obj = SpectraAnalyzer(
+    wavelength=wavelength,
+    flux=flux
+)
+
+obj.fit_spline((50, 50))
+obj.create_integrated_flux_map()
+```
+
 --
 
 # Why I built this
