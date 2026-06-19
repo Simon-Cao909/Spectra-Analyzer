@@ -16,7 +16,7 @@ def poly_func(x, **params):
         total += params[f'a{i}'] * x ** i
     return total
 
-class spectraAnalyzer:
+class SpectraAnalyzer:
     '''
     Welcome to Spectra Analyzer, by me, Simon, and many other people. 
     In particular, Nicholas Clark, Charmi Bhatt, and Jan Cami. 
@@ -1204,7 +1204,7 @@ class spectraAnalyzer:
 '''
 Example of using it
 '''
-# mySpec = spectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-short_s3d.fits",
+# mySpec = SpectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-short_s3d.fits",
 #                                          r"C:\USRA_Research\Code\ngc6302_ch1-medium_s3d.fits",
 #                                          r"C:\USRA_Research\Code\ngc6302_ch1-long_s3d.fits",
 #                                          r"C:\USRA_Research\Code\ngc6302_ch2-short_s3d.fits",
@@ -1217,7 +1217,7 @@ Example of using it
 # mySpec.create_integrated_flux_map(vmin=-0.004, vmax=0.0005) # Integrated surface brightness map
 
 
-# mySpec = spectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-short_s3d.fits",
+# mySpec = SpectraAnalyzer(fits_filepaths=[r"C:\USRA_Research\Code\ngc6302_ch1-short_s3d.fits",
 #                                          r"C:\USRA_Research\Code\ngc6302_ch1-medium_s3d.fits",
 #                                          r"C:\USRA_Research\Code\ngc6302_ch1-long_s3d.fits",
 #                                          r"C:\USRA_Research\Code\ngc6302_ch2-short_s3d.fits",
