@@ -20,15 +20,11 @@ SpectraAnalyzer was built out of my own experience to solve many of the issues I
 
 # Some examples
 Interactive heatmap:
-https://github.com/user-attachments/assets/07fce5cf-2638-492e-abb7-44c316dd8883
+![]https://github.com/user-attachments/assets/07fce5cf-2638-492e-abb7-44c316dd8883
 
 
 Spline fitting:
-https://github.com/user-attachments/assets/a3952481-6749-440e-8520-090bfe5ab01c
-
-
-Integrated flux map:
-<img width="1266" height="960" alt="image" src="https://github.com/user-attachments/assets/b0a64353-5ba7-4667-8ab1-e83337760034" />
+![]https://github.com/user-attachments/assets/a3952481-6749-440e-8520-090bfe5ab01c
 
 --
 
