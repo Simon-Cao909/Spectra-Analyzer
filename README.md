@@ -20,11 +20,10 @@ SpectraAnalyzer was built out of my own experience to solve many of the issues I
 
 # Some examples
 Interactive heatmap:
-![]https://github.com/user-attachments/assets/07fce5cf-2638-492e-abb7-44c316dd8883
-
+<img width="420" height="358" alt="interactive_heatmap" src="https://github.com/user-attachments/assets/c9f434b8-6ac5-4dbe-a3ec-b094507bd156" />
 
 Spline fitting:
-![]https://github.com/user-attachments/assets/a3952481-6749-440e-8520-090bfe5ab01c
+<img width="322" height="274" alt="spline_fitting" src="https://github.com/user-attachments/assets/bd5cb23c-6605-4116-baa6-6e2ef33bdc66" />
 
 --
 
